@@ -8,12 +8,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="description" content="Learning, Sharing, and Growing">
 
-    <title>Tensor学习，用cnn训练机器识别信长和信喵 - KrseLee的博客</title>
+    <title>TensorFlow学习——用CNN训练机器识别信长和信喵 - KrseLee的博客</title>
 
     <link rel="canonical" href="http://localhost:4000/2017/08/06/Tensor%E5%AD%A6%E4%B9%A0-%E7%94%A8CNN%E8%AE%AD%E7%BB%83%E6%9C%BA%E5%99%A8%E8%AF%86%E5%88%AB%E4%BF%A1%E9%95%BF%E5%92%8C%E4%BF%A1%E5%96%B5/">
 
     <!-- Icons -->
-  <link rel="shortcut icon" href="img/favicon.ico">
+    <link rel="shortcut icon" href="img/favicon.ico">
 
     <!-- Bootstrap Core CSS -->
     <link rel="stylesheet" href="/css/bootstrap.min.css">
@@ -35,7 +35,8 @@
         <script src="https://oss.maxcdn.com/libs/html5shiv/3.7.0/html5shiv.js"></script>
         <script src="https://oss.maxcdn.com/libs/respond.js/1.4.2/respond.min.js"></script>
     <![endif]-->
-
+    <script src="/js/jquery.min.js"></script>
+    <script src="/js/bootstrap.min.js"></script>
 </head>
 
 
@@ -71,15 +72,11 @@
                 </li>
                 
                 <li>
-                    <a href="/archive/">Archive</a>
+                    <a href="/blogs/">技术博客</a>
                 </li>
                 
                 <li>
-                    <a href="/milestone/">milestone</a>
-                </li>
-                
-                <li>
-                    <a href="/tags/">Tags</a>
+                    <a href="/travels/">游记</a>
                 </li>
                 
             </ul>
@@ -101,10 +98,7 @@
         <div class="row">
             <div class="col-lg-8 col-lg-offset-2 col-md-10 col-md-offset-1">
                 <div class="post-heading">
-                    <div class="Tags">
-                        
-                    </div>
-                    <h1>Tensor学习，用cnn训练机器识别信长和信喵</h1>
+                    <h1>TensorFlow学习——用CNN训练机器识别信长和信喵</h1>
                     
                     <span class="meta">Posted by CnFeat on August 6, 2017</span>
                 </div>
@@ -122,9 +116,7 @@
         <div class="row">
             <div class="col-lg-8 col-lg-offset-2 col-md-10 col-md-offset-1 post-container">
 
-                <h1 id="tensorflow学习用cnn训练机器识别信长和信喵">TensorFlow学习——用CNN训练机器识别信长和信喵</h1>
-
-<p>最近想搞个图片分类器，实现自己加载本地的图片进行训练，然后保存模型，另起一个程序加载模型，然后读入几张图片进行预测。回头盘点了下几个熟悉开源的DL工具，觉得做图片分类还是tensorflow比较方便，于是就找了点图片完成了这个模型，这里记录一下。</p>
+                <p>最近想搞个图片分类器，实现自己加载本地的图片进行训练，然后保存模型，另起一个程序加载模型，然后读入几张图片进行预测。回头盘点了下几个熟悉开源的DL工具，觉得做图片分类还是tensorflow比较方便，于是就找了点图片完成了这个模型，这里记录一下。</p>
 
 <h2 id="一数据准备">一.数据准备</h2>
 <p>用什么数据来构造分类器呢？记得前两年很喜欢玩《信长之野望14》，里面不是有很多人物头像吗？而且还分<code class="highlighter-rouge">信长之野望原版</code>和<code class="highlighter-rouge">喵之信长</code>版，索性做个分类器识别是人头还是猫头好了。</p>
@@ -443,7 +435,7 @@ sess.close()
                 <ul class="pager">
                     
                     <li class="previous">
-                        <a href="/2017/07/23/%E8%A5%BF%E5%8C%97%E7%8E%AF%E6%B8%B8%E8%AE%B0/" data-toggle="tooltip" data-placement="top" title="西北环游记">&larr; Previous Post</a>
+                        <a href="/travels/2017/07/23/%E8%A5%BF%E5%8C%97%E7%8E%AF%E6%B8%B8%E8%AE%B0/" data-toggle="tooltip" data-placement="top" title="西北环游记">&larr; Previous Post</a>
                     </li>
                     
                     
@@ -463,11 +455,9 @@ sess.close()
                 </style>
 
                 <div class="ds-share"
-                    data-thread-key="/2017/08/06/Tensor学习，用CNN训练机器识别信长和信喵" data-title="Tensor学习，用cnn训练机器识别信长和信喵"
+                    data-thread-key="/2017/08/06/Tensor学习，用CNN训练机器识别信长和信喵" data-title="TensorFlow学习——用CNN训练机器识别信长和信喵"
                     data-images="http://localhost:4000/img/green.jpg"
-                    data-content="TensorFlow学习——用CNN训练机器识别信长和信喵
-
-最近想搞个图片分类器，实现自己加载本地的图片进行训练，然后保存模型，另起一个程序加载模型，然... | Microdust:Azeril's blog"
+                    data-content="最近想搞个图片分类器，实现自己加载本地的图片进行训练，然后保存模型，另起一个程序加载模型，然后读入几张图片进行预测。回头盘点了下几个熟悉开源的DL工具，觉... | Microdust:Azeril's blog"
                     data-url="http://localhost:4000/2017/08/06/Tensor%E5%AD%A6%E4%B9%A0-%E7%94%A8CNN%E8%AE%AD%E7%BB%83%E6%9C%BA%E5%99%A8%E8%AF%86%E5%88%AB%E4%BF%A1%E9%95%BF%E5%92%8C%E4%BF%A1%E5%96%B5/">
                     <div class="ds-share-inline">
                       <ul  class="ds-share-icons-16">
@@ -487,7 +477,7 @@ sess.close()
 
                 <!-- 多说评论框 start -->
                 <div class="comment">
-                    <div class="ds-thread" data-thread-key="/2017/08/06/Tensor学习，用CNN训练机器识别信长和信喵" data-title="Tensor学习，用cnn训练机器识别信长和信喵" data-url="http://localhost:4000/2017/08/06/Tensor%E5%AD%A6%E4%B9%A0-%E7%94%A8CNN%E8%AE%AD%E7%BB%83%E6%9C%BA%E5%99%A8%E8%AF%86%E5%88%AB%E4%BF%A1%E9%95%BF%E5%92%8C%E4%BF%A1%E5%96%B5/"></div>
+                    <div class="ds-thread" data-thread-key="/2017/08/06/Tensor学习，用CNN训练机器识别信长和信喵" data-title="TensorFlow学习——用CNN训练机器识别信长和信喵" data-url="http://localhost:4000/2017/08/06/Tensor%E5%AD%A6%E4%B9%A0-%E7%94%A8CNN%E8%AE%AD%E7%BB%83%E6%9C%BA%E5%99%A8%E8%AF%86%E5%88%AB%E4%BF%A1%E9%95%BF%E5%92%8C%E4%BF%A1%E5%96%B5/"></div>
                 </div>
                 <!-- 多说评论框 end -->
             </div>
