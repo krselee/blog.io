@@ -1,0 +1,1125 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>KrseLee的博客</title>
+    <description>Learning, Sharing, and Growing</description>
+    <link>http://localhost:4000/</link>
+    <atom:link href="http://localhost:4000/feed.xml" rel="self" type="application/rss+xml" />
+    <pubDate>Sun, 27 Aug 2017 18:09:27 +0800</pubDate>
+    <lastBuildDate>Sun, 27 Aug 2017 18:09:27 +0800</lastBuildDate>
+    <generator>Jekyll v3.5.1</generator>
+    
+      <item>
+        <title>Tensor学习，用cnn训练机器识别信长和信喵</title>
+        <description>&lt;h1 id=&quot;tensorflow学习用cnn训练机器识别信长和信喵&quot;&gt;TensorFlow学习——用CNN训练机器识别信长和信喵&lt;/h1&gt;
+
+&lt;p&gt;最近想搞个图片分类器，实现自己加载本地的图片进行训练，然后保存模型，另起一个程序加载模型，然后读入几张图片进行预测。回头盘点了下几个熟悉开源的DL工具，觉得做图片分类还是tensorflow比较方便，于是就找了点图片完成了这个模型，这里记录一下。&lt;/p&gt;
+
+&lt;h2 id=&quot;一数据准备&quot;&gt;一.数据准备&lt;/h2&gt;
+&lt;p&gt;用什么数据来构造分类器呢？记得前两年很喜欢玩《信长之野望14》，里面不是有很多人物头像吗？而且还分&lt;code class=&quot;highlighter-rouge&quot;&gt;信长之野望原版&lt;/code&gt;和&lt;code class=&quot;highlighter-rouge&quot;&gt;喵之信长&lt;/code&gt;版，索性做个分类器识别是人头还是猫头好了。&lt;/p&gt;
+
+&lt;p&gt;数据下载地址（百度云）：&lt;/p&gt;
+&lt;blockquote&gt;
+  &lt;p&gt;链接: https://pan.baidu.com/s/1slUDK0t 密码: vjv8&lt;/p&gt;
+&lt;/blockquote&gt;
+
+&lt;p&gt;这里面将头像数据分别放在了两个目录下，&lt;/p&gt;
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;nobunaga ：原版头像
+nobunyaga ：喵版头像
+&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+&lt;p&gt;我从他们里面分别把信长的头像取了出去不做训练，看看最后的模型是否能够认识他。&lt;/p&gt;
+
+&lt;h2 id=&quot;二载入数据&quot;&gt;二.载入数据&lt;/h2&gt;
+&lt;p&gt;首先，用什么方法读取图片呢？百度一下之后觉得PIL是比较方便的，于是用pip装了下PIL就可以使用了。在pycharm中新建一个工程，创建python脚本CnnClassify，第一部分代码编写如下：&lt;/p&gt;
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;# -*- coding: utf-8 -*-
+
+from PIL import Image
+import glob
+import os
+import tensorflow as tf
+import numpy as np
+import time
+
+img_path = '../images/nobu/'
+model_dir = &quot;./model/nobu/&quot;
+model_name = &quot;nobunaga_model&quot;
+
+# 将所有的图片resize成100*100
+w = 100
+h = 100
+c = 3
+
+
+# 读取图片
+def read_img(path):
+    cate = [path + x for x in os.listdir(path) if os.path.isdir(path + x)]
+    imgs = []
+    labels = []
+    for idx, folder in enumerate(cate):
+        for im in glob.glob(folder + '/*.jpg'):
+            print('reading the images:%s' % (im))
+            print('classify is %d:' % (idx))
+            # 打开图片
+            img = Image.open(im)
+            img = img.resize((w,h))
+            img = np.array(img)
+            imgs.append(img)
+            labels.append(idx)
+    return np.asarray(imgs, np.float32), np.asarray(labels, np.int32)
+&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+&lt;p&gt;这段代码主要做了几件事情：&lt;/p&gt;
+&lt;ol&gt;
+  &lt;li&gt;把相关的工具给引用进来&lt;/li&gt;
+  &lt;li&gt;设置一些全局变量，比如输入图片的路径、模型输出的路径以及规定训练用的图片大小&lt;/li&gt;
+  &lt;li&gt;定义一个函数read_img来读取数据集，给定一个图片根目录，会自动读取其每个子目录下的图片，并且不同子目录的图片对应的分类号不同&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;在读取图片时进行了一些转化，比如将原始图片大小转为100*100，然后转成了一个&lt;code class=&quot;highlighter-rouge&quot;&gt;(100,100,3)&lt;/code&gt;的NpArray，再把这个NpArray加入倒一个List中去，作为数据集，结构就成了&lt;code class=&quot;highlighter-rouge&quot;&gt;[n,100,100,3]&lt;/code&gt;；同理，这样构造一个标签集合labels。&lt;/p&gt;
+
+&lt;p&gt;接下来要对数据进行一个划分，分为训练集和验证集，先对这些图片的顺序进行shuffle（洗牌），然后按照一个比例划分。&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;data, label = read_img(img_path)
+
+# 打乱顺序
+num_example = data.shape[0]
+arr = np.arange(num_example)
+np.random.shuffle(arr)
+data = data[arr]
+label = label[arr]
+
+# 将所有数据分为训练集和验证集
+ratio = 0.8
+s = np.int(num_example * ratio)
+x_train = data[:s]
+y_train = label[:s]
+x_val = data[s:]
+y_val = label[s:]
+&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+&lt;p&gt;至此，载入数据的工作完成。&lt;/p&gt;
+
+&lt;h2 id=&quot;三构建cnn模型&quot;&gt;三.构建CNN模型&lt;/h2&gt;
+&lt;p&gt;做图片分类的首选是卷积神经网络（CNN），当然目前有很多优秀的CNN模型可以使用，我这里参考了博文 &lt;a href=&quot;http://www.cnblogs.com/denny402/p/6931338.html&quot;&gt;http://www.cnblogs.com/denny402/p/6931338.html&lt;/a&gt; 给出的模型，代码编写如下：&lt;/p&gt;
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;# -----------------构建网络----------------------
+# 占位符
+x = tf.placeholder(tf.float32, shape=[None, w, h, c], name='x')
+y_ = tf.placeholder(tf.int32, shape=[None, ], name='y_')
+
+# 第一个卷积层（100——&amp;gt;50)
+conv1 = tf.layers.conv2d(
+    inputs=x,
+    filters=32,
+    kernel_size=[5, 5],
+    padding=&quot;same&quot;,
+    activation=tf.nn.relu,
+    kernel_initializer=tf.truncated_normal_initializer(stddev=0.01))
+pool1 = tf.layers.max_pooling2d(inputs=conv1, pool_size=[2, 2], strides=2)
+
+# 第二个卷积层(50-&amp;gt;25)
+conv2 = tf.layers.conv2d(
+    inputs=pool1,
+    filters=64,
+    kernel_size=[5, 5],
+    padding=&quot;same&quot;,
+    activation=tf.nn.relu,
+    kernel_initializer=tf.truncated_normal_initializer(stddev=0.01))
+pool2 = tf.layers.max_pooling2d(inputs=conv2, pool_size=[2, 2], strides=2)
+
+# 第三个卷积层(25-&amp;gt;12)
+conv3 = tf.layers.conv2d(
+    inputs=pool2,
+    filters=128,
+    kernel_size=[3, 3],
+    padding=&quot;same&quot;,
+    activation=tf.nn.relu,
+    kernel_initializer=tf.truncated_normal_initializer(stddev=0.01))
+pool3 = tf.layers.max_pooling2d(inputs=conv3, pool_size=[2, 2], strides=2)
+
+# 第四个卷积层(12-&amp;gt;6)
+conv4 = tf.layers.conv2d(
+    inputs=pool3,
+    filters=128,
+    kernel_size=[3, 3],
+    padding=&quot;same&quot;,
+    activation=tf.nn.relu,
+    kernel_initializer=tf.truncated_normal_initializer(stddev=0.01))
+pool4 = tf.layers.max_pooling2d(inputs=conv4, pool_size=[2, 2], strides=2)
+
+re1 = tf.reshape(pool4, [-1, 6 * 6 * 128])
+
+# 全连接层
+dense1 = tf.layers.dense(inputs=re1,
+                         units=1024,
+                         activation=tf.nn.relu,
+                         kernel_initializer=tf.truncated_normal_initializer(stddev=0.01),
+                         kernel_regularizer=tf.contrib.layers.l2_regularizer(0.003))
+dense2 = tf.layers.dense(inputs=dense1,
+                         units=512,
+                         activation=tf.nn.relu,
+                         kernel_initializer=tf.truncated_normal_initializer(stddev=0.01),
+                         kernel_regularizer=tf.contrib.layers.l2_regularizer(0.003))
+logits = tf.layers.dense(inputs=dense2,
+                         units=5,
+                         activation=None,
+                         kernel_initializer=tf.truncated_normal_initializer(stddev=0.01),
+                         kernel_regularizer=tf.contrib.layers.l2_regularizer(0.003))
+# ---------------------------网络结束---------------------------
+
+loss = tf.losses.sparse_softmax_cross_entropy(labels=y_, logits=logits)
+train_op = tf.train.AdamOptimizer(learning_rate=0.001).minimize(loss)
+correct_prediction = tf.equal(tf.cast(tf.argmax(logits, 1), tf.int32), y_)
+acc = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
+
+&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+&lt;p&gt;这段代码构造了一个4层卷积+池化的CNN网络，然后用全连接层进行输出，这个全连接层包括两个隐层，用&lt;code class=&quot;highlighter-rouge&quot;&gt;ReLU&lt;/code&gt;作为激活函数，一个输出层。最后，定义了损失函数、优化器、正确率度量和ACC。
+至此，CNN模型构建完毕。&lt;/p&gt;
+
+&lt;h2 id=&quot;四训练模型保存&quot;&gt;四.训练模型，保存&lt;/h2&gt;
+&lt;p&gt;首先，定义了一个函数来按批次取数据进行训练&lt;/p&gt;
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;def minibatches(inputs=None, targets=None, batch_size=None, shuffle=False):
+    assert len(inputs) == len(targets)
+    if shuffle:
+        indices = np.arange(len(inputs))
+        np.random.shuffle(indices)
+    for start_idx in range(0, len(inputs) - batch_size + 1, batch_size):
+        if shuffle:
+            excerpt = indices[start_idx:start_idx + batch_size]
+        else:
+            excerpt = slice(start_idx, start_idx + batch_size)
+        yield inputs[excerpt], targets[excerpt]
+&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+
+&lt;p&gt;接着，定义总共进行多少轮训练，以及每轮训练使用的数据量大小batch。我使用的数据集有近400张图片，训练集80%，这里40轮，每轮64张，总共2560，相当于被张图片拿来训练了7、8次左右。然后创建了一个长连接的InteractiveSession。&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;n_epoch = 40
+batch_size = 64
+sess = tf.InteractiveSession()
+sess.run(tf.global_variables_initializer())
+&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+&lt;p&gt;接下来就是训练和保存模型了。这里创建一个保存器，定义最多保存3个模型，创建模型生成路径，然后进行迭代训练，训练时打印每一轮的训练误差、ACC以及验证误差、ACC。迭代40轮之后ACC已经达到0.9以上了，试过增加迭代轮数ACC可以接近1。&lt;/p&gt;
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;# 保存模型
+saver=tf.train.Saver(max_to_keep=3)
+max_acc=0
+
+if not os.path.exists(model_dir):
+    os.mkdir(model_dir)
+
+for epoch in range(n_epoch):
+    start_time = time.time()
+    print (&quot;step:\t%d&quot; % epoch)
+    # training
+    train_loss, train_acc, n_batch = 0, 0, 0
+    for x_train_a, y_train_a in minibatches(x_train, y_train, batch_size, shuffle=True):
+        _, err, ac = sess.run([train_op, loss, acc], feed_dict={x: x_train_a, y_: y_train_a})
+        print x_train_a.shape
+        train_loss += err;
+        train_acc += ac;
+        n_batch += 1
+    print(&quot;   train loss: %f&quot; % (train_loss / n_batch))
+    print(&quot;   train acc: %f&quot; % (train_acc / n_batch))
+
+    # validation
+    val_loss, val_acc, n_batch = 0, 0, 0
+    for x_val_a, y_val_a in minibatches(x_val, y_val, batch_size, shuffle=False):
+        err, ac = sess.run([loss, acc], feed_dict={x: x_val_a, y_: y_val_a})
+        val_loss += err;
+        val_acc += ac;
+        n_batch += 1
+    print(&quot;   validation loss: %f&quot; % (val_loss / n_batch))
+    print(&quot;   validation acc: %f&quot; % (val_acc / n_batch))
+
+    # 保存模型
+    if val_acc &amp;gt; max_acc:
+        max_acc = val_acc
+        saver.save(sess, os.path.join(model_dir, model_name), global_step = epoch+ 1)
+        print &quot;保存模型成功！&quot;
+
+sess.close()
+&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+&lt;p&gt;这里有个技巧是每轮迭代计算新的验证ACC是否大于历史最有ACC，如果大于则把模型保存下来，否则就不保存。因为前面设置了最多保留3个模型，因此训练完后保留了ACC最高的3个模型。&lt;/p&gt;
+
+&lt;h2 id=&quot;五加载模型和预测&quot;&gt;五.加载模型和预测&lt;/h2&gt;
+&lt;p&gt;新建一个CnnPredict的Python脚本，首先要把刚才定义的模型结构搬过来，因为代码太多，这里就省略了（如果有可以把结构也保存到模型的方法你可以告诉我，我试过不把模型搬过来Saver就会报错，说没有模型需要保存）。&lt;/p&gt;
+
+&lt;p&gt;接着是把sess和saver都还原出来，然后使用latest_checkpoint在生成的一堆模型中去找最后一个生成的模型，进行还原。&lt;/p&gt;
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;sess = tf.InteractiveSession()
+sess.run(tf.global_variables_initializer())
+
+saver = tf.train.Saver()
+
+# Load model
+model_file=tf.train.latest_checkpoint(model_dir)
+saver.restore(sess, model_file)
+
+&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+
+&lt;p&gt;接下来就要把之前被我拎出来的信长的头像拿来做预测了。这里需要构造跟之前训练一样的数据格式，不然会报格式不匹配的错误。&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;# 加载信长头像，正确的分类是0
+imgs = []
+labels = []
+
+img = Image.open(img_path + &quot;00034_00001.jpg&quot;)
+img = img.resize((w, h))
+img = np.array(img)
+imgs.append(img)
+labels.append(0)
+
+imgs = np.asarray(imgs, np.float32)
+labels = np.asarray(labels, np.float32)
+
+ret = sess.run(y_, feed_dict={x: imgs, y_:labels})
+print(&quot;计算模型结果成功！&quot;)
+# 显示测试结果
+print(&quot;预测结果:%d&quot; % ret)
+print(&quot;实际结果:%d&quot; % 0)
+
+# 加载信喵头像，正确的分类是1
+imgs = []
+labels = []
+
+img = Image.open(img_path + &quot;00034_01904.jpg&quot;)
+img = img.resize((w, h))
+img = np.array(img)
+imgs.append(img)
+labels.append(1)
+
+imgs = np.asarray(imgs, np.float32)
+labels = np.asarray(labels, np.float32)
+
+# 根据模型计算结果
+ret = sess.run(y_, feed_dict={x: imgs, y_:labels})
+print(&quot;计算模型结果成功！&quot;)
+# 显示测试结果
+print(&quot;预测结果:%d&quot; % ret)
+print(&quot;实际结果:%d&quot; % 1)
+sess.close()
+&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+
+&lt;p&gt;预测结果如下：&lt;/p&gt;
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;计算模型结果成功！
+预测结果:0
+实际结果:0
+计算模型结果成功！
+预测结果:1
+实际结果:1
+&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+&lt;p&gt;很高兴，我们的机器能够正确识别信长和信喵了。
+&lt;img src=&quot;https://raw.githubusercontent.com/LeeKrSe/TravelToNorthWest/master/blog_img/nobunaga/00034_00001.jpg&quot; alt=&quot;织田信长&quot; /&gt;
+织田信长
+&lt;img src=&quot;https://raw.githubusercontent.com/LeeKrSe/TravelToNorthWest/master/blog_img/nobunaga/00034_01904.jpg&quot; alt=&quot;织田信喵&quot; /&gt;
+织田信喵&lt;/p&gt;
+
+&lt;h2 id=&quot;参考文献&quot;&gt;参考文献：&lt;/h2&gt;
+&lt;p&gt;[1] &lt;a href=&quot;http://www.cnblogs.com/denny402/p/6931338.html&quot;&gt;tensorflow 1.0 学习：用CNN进行图像分类&lt;/a&gt;      &lt;br /&gt;
+[2] &lt;a href=&quot;http://wustmeiming.github.io/2017/01/09/Tensorflow%E6%A8%A1%E5%9E%8B%E4%BF%9D%E5%AD%98%E4%B8%8E%E4%BD%BF%E7%94%A8/&quot;&gt;Tensorflow模型保存与使用&lt;/a&gt;&lt;/p&gt;
+
+&lt;h2 id=&quot;完整代码&quot;&gt;完整代码&lt;/h2&gt;
+&lt;p&gt;&lt;a href=&quot;https://github.com/LeeKrSe/TensorFlowDemo/tree/master/nobunaga/ImageClassify&quot;&gt;见我的github&lt;/a&gt;&lt;/p&gt;
+</description>
+        <pubDate>Sun, 06 Aug 2017 00:00:00 +0800</pubDate>
+        <link>http://localhost:4000/2017/08/06/Tensor%E5%AD%A6%E4%B9%A0-%E7%94%A8CNN%E8%AE%AD%E7%BB%83%E6%9C%BA%E5%99%A8%E8%AF%86%E5%88%AB%E4%BF%A1%E9%95%BF%E5%92%8C%E4%BF%A1%E5%96%B5/</link>
+        <guid isPermaLink="true">http://localhost:4000/2017/08/06/Tensor%E5%AD%A6%E4%B9%A0-%E7%94%A8CNN%E8%AE%AD%E7%BB%83%E6%9C%BA%E5%99%A8%E8%AF%86%E5%88%AB%E4%BF%A1%E9%95%BF%E5%92%8C%E4%BF%A1%E5%96%B5/</guid>
+        
+        
+      </item>
+    
+      <item>
+        <title>西北环游记</title>
+        <description>&lt;h1 id=&quot;西北环游记&quot;&gt;西北环游记&lt;/h1&gt;
+&lt;h2 id=&quot;写在前面&quot;&gt;写在前面&lt;/h2&gt;
+&lt;p&gt;此次西北之行是我们实验室（浙江大学软件学院2015级S310室）的毕业旅行，全程人均约5000，其中从杭到兰州、兰州返程、兰州西宁往返约1300，在外游玩共15天，包车10天，15天花费约3700。&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://raw.githubusercontent.com/LeeKrSe/TravelToNorthWest/master/photo/xibei/content.png&quot; alt=&quot;路线&quot; title=&quot;路线图&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;此次行程虽一波三折，但庆幸的是遇到了一位很好的司机师傅——季品师傅，尽心尽力带我们游遍了西北主要景点，旅途中还为我们省下了不小的开销，包车价格也十分划算。应季师傅的请求，忙里偷闲，断断续续一个月的时间写下此篇游记，一来是为了对他一路上的照顾表示感谢，二来希望更多的朋友能够选择他和他的车队，最重要的是为实验室的小伙伴留下一份珍贵的回忆。&lt;/p&gt;
+
+&lt;p&gt;附季师傅联系方式：&lt;/p&gt;
+
+&lt;blockquote&gt;
+  &lt;table&gt;
+    &lt;tbody&gt;
+      &lt;tr&gt;
+        &lt;td&gt;手机&lt;/td&gt;
+        &lt;td&gt;13997072186&lt;/td&gt;
+      &lt;/tr&gt;
+      &lt;tr&gt;
+        &lt;td&gt;微信&lt;/td&gt;
+        &lt;td&gt;jp13997072186&lt;/td&gt;
+      &lt;/tr&gt;
+    &lt;/tbody&gt;
+  &lt;/table&gt;
+&lt;/blockquote&gt;
+
+&lt;hr /&gt;
+
+&lt;p&gt;如果说有一场旅行是多年后回味依旧能陶醉其中的，那一定是怀着激动而复杂的心情，领略过各种奇异的景色，同某些重要的人一起走过的旅行，更确切的说，就是这次青甘环游之行。&lt;/p&gt;
+&lt;h2 id=&quot;一-启程&quot;&gt;一.	启程&lt;/h2&gt;
+&lt;p&gt;事情一开始并不是那么一帆风顺，确定要旅行的时候，离出发日已不足十五天了。实验室的伙伴们最开始想走川西香格里拉大环线，却发现那条路并没有想象中的那么轻松，而去东南亚的护照还有一半人没有办理。接着，叶总和大尸兄宣布不参加毕业旅行，学神为了女朋友也选择退出，尚广回家过端午一定要六月才启程，其他人六月中下旬也有自己的安排……种种原因，眼看计划就要泡汤，不知是谁放眼中国地图，用手在西北画了一个圈——青海、甘肃，一个时间充裕、路况安全、景点丰富、别具风格的线路。这个想法很快得到了众人的赞同，于是乎，订了杭州到兰州的火车，伴着隆隆的汽笛，我们的旅途就这样开始了。&lt;/p&gt;
+
+&lt;h2 id=&quot;二-自驾还是包车&quot;&gt;二.	自驾还是包车&lt;/h2&gt;
+&lt;p&gt;我已不是第一次前往大西北了，2015年同“小茶馆”的三个小伙伴游西安，至华山，再到西宁，游青海湖和茶卡盐湖，在火车站和三位驴友一起包了辆七座车，司机是回民，路上遇到堵车，茶卡返程已是晚上七点，想住宿，司机坚决地说明早走得多付一天的钱，而黑马河已经没有便宜的住宿；想返程，又得额外加1/4的钱走高。回到了西宁已是凌晨，住宿也是早已订空，在城里吃了羊肠面和羊肉串，七个人挤了间废了九牛二虎之力才找到的破旧旅馆的单间。或许是羊肠面不干净，加上晚上肚子着了凉，第二天犯了肠炎，还好同行的小伙伴细心照顾，最后发着烧拉着肚子回了重庆。&lt;/p&gt;
+
+&lt;p&gt;俗话说要“吃一堑长一智”，第二次来玩，如何避免被坑是我觉得最重要的问题。小伙伴们就自驾和包车讨论了很久，神州租车七座2.0T的SUV一天费用接近300，整个环线下来油费得3000出头，路况不熟也不知道跑得背多少罚单，前面有多少危险；跟好几个包车师傅聊下来10天价格都在7500-9000，纯玩，会轻松很多，最终大伙儿决定包车。&lt;/p&gt;
+
+&lt;p&gt;既然是包车，那师傅的选择就尤为关键了。首先我是不赞成选择回族师傅的，这倒不是什么歧视，而是饮食习惯的问题，包车几乎是要管司机的饮食的，如果10天下来全是清真，那估计都吃的想吐了；其次是安全考虑，同行的三个是妹子，因此我们考虑选择中年的师傅，一是他们对路途、景点比较熟悉，二是自己也为人父母，有一个幸福的家庭，不会跟我们学生太计较小事情，更不会心生什么歹意。&lt;/p&gt;
+
+&lt;p&gt;根据这些条件，大伙儿联系了不下十个师傅，最后层层筛选，选择了最符合条件的于师傅。于师傅也很爽快，给了我们一个十天很优惠的价格，说玩得不满意不收钱，最后一天结账就好。于是我们满心欢喜地在火车上吃起了零食玩起了UNO，只等到达目的地——兰州。&lt;/p&gt;
+
+&lt;h2 id=&quot;三-兰州拉面的故乡&quot;&gt;三.	兰州，拉面的故乡&lt;/h2&gt;
+&lt;p&gt;说到兰州，想必你的第一印象是遍地开花的“兰州拉面”了，火车上听一个在浙读研的兰州人说，兰州最有名的拉面在鸿宾楼，于是下了火车第一件事就是去尝尝这个“兰州第一面”。&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://raw.githubusercontent.com/LeeKrSe/TravelToNorthWest/master/photo/xibei/03/lanzhou01.jpeg&quot; alt=&quot;兰州第一面&quot; title=&quot;鸿宾楼&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;十块钱一碗面，二十块钱一份套餐在沿海倒不算贵，但在兰州也就这儿能卖到这个价了吧。说实话，吃了这面觉得全国的兰州拉面在味道上都是正宗的，不同之处只在于配菜和辣度了。&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://raw.githubusercontent.com/LeeKrSe/TravelToNorthWest/master/photo/xibei/03/lanzhou02.jpeg&quot; alt=&quot;兰州第一面&quot; title=&quot;鸿宾楼&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;鸿宾楼往北两公里，就是是黄河边，水车博览园。初中学地理，老师说黄河流经陕北黄土高原时，因水土流失携带了大量黄沙，所以中下游河水发黄，上游的水质则是清澈的。到了兰州发现并不是这么回事，即使还处于上游，这里的黄河水已经黄成了药汤。&lt;/p&gt;
+
+&lt;p&gt;在水车博览园问了妹子们一个很简单又好像不简单的问题——静水中的水车为什么会不停地转动。苾湲很自然地上了套，说因为水车中水的势能转为了动能，不断地把水往上送，也就不断地获得了势能。且不说这个能量如何转化，假设转化是可行的，这样不就相当于造出了永动机了吗？于是只能嘲讽一下她，说，水车一直在转，当然是电动的啦。&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://raw.githubusercontent.com/LeeKrSe/TravelToNorthWest/master/photo/xibei/03/lanzhou03.jpeg&quot; alt=&quot;兰州第一面&quot; title=&quot;水车博览园&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;在兰州同靖远过来的学霸同志汇合，此行的六人众就算是齐了。兰州火车站的安检特别的严格，妹子们在杭州屈臣氏高价买了防晒喷雾被告知不能带上去西宁的动车，仿佛一道晴天霹雳打在她们的头上，带了近两千公里的喷雾，最后只能哪儿来回哪儿去。&lt;/p&gt;
+
+&lt;h2 id=&quot;四-西宁阴霾之地依旧充满变数&quot;&gt;四.	西宁，阴霾之地，依旧充满变数&lt;/h2&gt;
+&lt;p&gt;动车在海拔2000米的青藏高原上飞驰，还有十分钟就到西宁站了，于师傅打来一个电话说自己突然有事接不了这单，交给了另外一个师傅。当听到这个消息时大家的表情都是懵的，为什么有事要换人不提前说，当我们要到站了才说？众人的第一反应都是被坑了，这里面有什么猫腻，但之前已经回绝了其他师傅，因此也只能先看看情况了。&lt;/p&gt;
+
+&lt;p&gt;来接车的师傅姓季，汉族人，四十来岁，典型的西北汉子，皮肤黝黑，高大微胖，一见面就送上了哈达表示欢迎。钱宝宝走在前面，也不推辞，直接就套在了脖子上，让众人都倒吸了一口气。为了搞清楚情况，苾湲继续跟于师傅电话沟通，我和学霸就上去和季师傅聊天。季师傅稍有腼腆，说自己是于师傅的徒弟，以前在西宁开出租，近年来旅游业发展旺盛，就跟着于师傅跑西北包车，接着我们又聊了聊路线，倒也听不出什么端倪。不过最后跟苾湲学霸商量，觉得因为突然换人，让我们的信任感一下跌入了谷底，暂时无法接受，需要晚上回酒店商量再决定，季师傅也表示理解，开车把我们送到了莫家街订的酒店。&lt;/p&gt;
+
+&lt;p&gt;这一晚是比较难熬的一晚，大家针对要不要坐季师傅的车讨论了好久，最后苾湲怕季师傅那边等久了，就直接回绝了。天色已晚，这一日是没法作出决定了，于是我们把行程推迟了一天，第二天一早又跟其他几个师傅联系了下，但其他师傅也不符合我们的条件。这时候于师傅又给我们来了电话，首先表明了不能亲自接单的歉意，然后说季师傅人看着可能有点粗，但是一个非常细心和热心的人，是他信得过的徒弟，如果路上有什么情况可以直接找他解决。&lt;/p&gt;
+
+&lt;p&gt;经过一晚的忙碌，大家对突然换人的做法已不是那么在意。所谓用人不疑，疑人不用，既然之前我们信任了于师傅，那么对于他推荐的人也应信任，季师傅在各方面还挺符合我们的要求，既然这样，又何必纠结呢。大家对此表示赞同，于是跟于师傅表达了我们的观点，确定了最终的方案，为了以防万一，我们还对电话录了音。就这样，怀着复杂的心情，我们的环游之旅开始了。&lt;/p&gt;
+
+&lt;h2 id=&quot;五-青海湖梦幻般的湖&quot;&gt;五.	青海湖，梦幻般的湖&lt;/h2&gt;
+&lt;p&gt;塔尔寺、拉脊山、青海湖是第一日的行程。&lt;/p&gt;
+
+&lt;p&gt;塔尔寺，这座藏传佛教格鲁派的圣寺，其规模的宏大，可以和杭州的灵隐、镇江的金山相媲美，我们用了足足三个小时才游完整座寺庙。&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://raw.githubusercontent.com/LeeKrSe/TravelToNorthWest/master/photo/xibei/05/taersi01.jpeg&quot; alt=&quot;塔尔寺&amp;quot;&quot; title=&quot;塔尔寺&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://raw.githubusercontent.com/LeeKrSe/TravelToNorthWest/master/photo/xibei/05/taersi02.jpg&quot; alt=&quot;塔尔寺&amp;quot;&quot; title=&quot;塔尔寺&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;拉脊山是环游的第一座雪山，同行的伙伴大多没上过海拔3000米以上的山，车才行至山脚，便激动不已，要求季师傅停车拍照。师傅看着她们有点惊讶，不过也没多说一句就停下车来，等一群人对着雪山一顿乱拍之后回到车上，师傅把我们拉到了海拔3800左右的观景台，此时众人才傻了眼，与面前的群山相比，之前看到的仅仅是冰山一角。&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://raw.githubusercontent.com/LeeKrSe/TravelToNorthWest/master/photo/xibei/05/lajishan01.jpg&quot; alt=&quot;拉脊山&quot; title=&quot;拉脊山&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://raw.githubusercontent.com/LeeKrSe/TravelToNorthWest/master/photo/xibei/05/lajishan02.jpg&quot; alt=&quot;拉脊山&quot; title=&quot;拉脊山&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://raw.githubusercontent.com/LeeKrSe/TravelToNorthWest/master/photo/xibei/05/lajishan03.jpg&quot; alt=&quot;拉脊山&quot; title=&quot;拉脊山&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;在倒淌河镇用过午饭，迎来了今日的重头戏——青海湖。最早听说青海湖的美是在冯君莉的散文中，她将青海湖的湛蓝和质朴描绘得淋漓尽致；两年前来青海湖，远远地领略了油菜花和波澜壮阔的湖面，却没能近距离地与她接触，直到这次，才近距离地感受到她的粗旷和壮丽。&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://raw.githubusercontent.com/LeeKrSe/TravelToNorthWest/master/photo/xibei/05/daotanghe01.jpeg&quot; alt=&quot;倒淌河镇&quot; title=&quot;倒淌河镇&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;季师傅带我们去了一个可以下到湖边的景区，他跟入口收费的人打了个招呼，就以一个极低的价格让我们六个人进了去。这里面朝大海，背对雪山，远眺青海湖，水与天碧蓝一色，辽阔无边；近看青海湖，云与浪交织翻涌，气势磅礴。倏尔风起，远浪奔袭而来，拍打在湖岸的碎石滩上，激起雪白的浪花，又渐渐退去了踪迹；俄儿风静，湖面波光粼粼，岸边被吹得不知所措的人儿又恢复了平静。湖边有牧民的牦牛、骏马，有装饰着五彩旗帜的堡垒、秋千，有写着“青海湖”大字的石碑。妹子们在湖边欢乐极了，不断地摆出各种姿势，季师傅也沉浸在给我们拍照的欢乐之中。&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://raw.githubusercontent.com/LeeKrSe/TravelToNorthWest/master/photo/xibei/05/qinghaihu03.jpg&quot; alt=&quot;青海湖&quot; title=&quot;青海湖&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://raw.githubusercontent.com/LeeKrSe/TravelToNorthWest/master/photo/xibei/05/qinghaihu04.jpg&quot; alt=&quot;青海湖&quot; title=&quot;青海湖&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://raw.githubusercontent.com/LeeKrSe/TravelToNorthWest/master/photo/xibei/05/qinghaihu05.jpg&quot; alt=&quot;青海湖&quot; title=&quot;青海湖&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;从湖边出来，师傅又带我们到了一处高地，站在高处远眺青海湖，目之所及，整个湖面尽收眼底。藏人称青海湖为“海”，其实一点也不过分，若不知自己在何处，面对这辽阔无垠的水面，谁又会觉得这只是一汪湛蓝的湖泊呢？翻越国道的护栏，早已抑制不住激动心情的我们不自觉地在草原上狂奔起来，只为和这天，这地，这湖，这洁白的羊群融为一体。&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://raw.githubusercontent.com/LeeKrSe/TravelToNorthWest/master/photo/xibei/05/qinghaihu01.jpg&quot; alt=&quot;青海湖&quot; title=&quot;青海湖&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://raw.githubusercontent.com/LeeKrSe/TravelToNorthWest/master/photo/xibei/05/qinghaihu02.jpg&quot; alt=&quot;青海湖&quot; title=&quot;青海湖&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;日已偏西，我们踏上了前往第一日宿地——黑马河镇的行程，学霸用师傅的车载音响放起了《蓝莲花》，大家一路欢笑一路高歌，尽情享受这在路上的感觉。&lt;/p&gt;
+
+&lt;h2 id=&quot;六-从天空之镜到青藏铁路的源头&quot;&gt;六.	从天空之镜到青藏铁路的源头&lt;/h2&gt;
+
+&lt;p&gt;如果没机会去玻利维亚，那么可以到茶卡盐湖一览“天空之镜”的盛景，当然这是茶卡人为了吸引游客做的广告，想要看到“天空之镜”还需要一个极好的天气。&lt;/p&gt;
+
+&lt;p&gt;在黑马河看过日出，翻过橡皮山，便是茶卡境内。&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://raw.githubusercontent.com/LeeKrSe/TravelToNorthWest/master/photo/xibei/05/richu01.jpeg&quot; alt=&quot;黑马河&quot; title=&quot;黑马河日出&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;两年前到茶卡盐湖，景区还极为混乱，印象最深的是买了门票却根本没有检票，游玩出来，同行的小哥以半价将票卖给了别人，后来我们拿着这钱在西宁吃了终生难忘的羊肠面。这次到茶卡完全变了样，听说是浙江的老板来投资建设，整个景区变得高大上起来，浙江人来旅游还能免门票，作为温州富商的同胞，尚广不禁得意起来。&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://raw.githubusercontent.com/LeeKrSe/TravelToNorthWest/master/photo/xibei/06/chaka01.jpg&quot; alt=&quot;茶卡盐湖&quot; title=&quot;茶卡盐湖&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;茶卡盐湖景区分两大板块，一是湖边的盐塑，完全用湖中采的盐堆砌雕刻的塑像，如西王母、成吉思汗；二是通向盐湖深处的火车道，道旁设有下水点，可以走进湖中和水天融为一体。&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://raw.githubusercontent.com/LeeKrSe/TravelToNorthWest/master/photo/xibei/06/chaka02.jpg&quot; alt=&quot;茶卡盐湖&quot; title=&quot;茶卡盐湖&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://raw.githubusercontent.com/LeeKrSe/TravelToNorthWest/master/photo/xibei/06/chaka03.jpg&quot; alt=&quot;茶卡盐湖&quot; title=&quot;茶卡盐湖&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;也许是运气不好，两次到盐湖都是阴天，天上的云倒映在湖中是灰蒙蒙的一片。虽然景色不美，但是风很大呀，走到湖中心，狂风呼啸，吹得众人抬不起头。我们在景区行走了三个小时，被吹了三个小时，大家着衣也比较单薄，最后感慨：被吹成了傻逼。&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://raw.githubusercontent.com/LeeKrSe/TravelToNorthWest/master/photo/xibei/06/chaka04.jpeg&quot; alt=&quot;茶卡盐湖&quot; title=&quot;茶卡盐湖&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;从盐湖出来用过了午饭，师傅开车上了高速，大家迷迷糊糊地睡着了，不知走了多久，到了德令哈，沿途看到了大片的防风林。车上时间较长，大家便开始吃起了东西，这时候就到了我表演削梨的时候了，也许在平时，削果皮不断还比较容易，但是在汽车后排狭小的空间里，汽车时而颠簸时而快慢，皮儿不断还真有点考验手艺，一口气削了好几个，成功的也只有一两个，不过看着大伙儿啃着梨满足的表情还是蛮开心的。可能是长时间开车的缘故，季师傅也开始犯困了，时不时把手探出车窗外吹吹风，时不时用手拍拍自己的脑袋，大伙儿也有点担心。还好不一会儿到了德令哈湖景区，我们决定下车玩一个小时，也给师傅点时间打个盹儿。&lt;/p&gt;
+
+&lt;p&gt;不出意外的是克鲁克湖也是浙江投资援建的，因此尚广又免了一单，美滋滋。这个湖与托素湖相邻，面积近50平方公里，景区倒是没啥特色，也不能说完全没特色，这里的蚊子特别的多，而且都是大个儿的蚊子，唯一庆幸的是它们不怎么咬人，否则就得不偿失了。&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://raw.githubusercontent.com/LeeKrSe/TravelToNorthWest/master/photo/xibei/06/gonglu05.jpeg&quot; alt=&quot;柴达木公路&quot; title=&quot;柴达木公路&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://raw.githubusercontent.com/LeeKrSe/TravelToNorthWest/master/photo/xibei/06/gonglu04.jpeg&quot; alt=&quot;柴达木公路&quot; title=&quot;柴达木公路&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;德令哈向西，就是是有聚宝盆美誉的柴达木盆地了，沿途经过壮丽的315国道，一边品尝季师傅给的高原酸奶，一边饱览柴达木盆地的丹霞地貌。远眺锡铁山，近看察尔汗林立的石化工厂，汽车在“万丈盐桥”上飞驰，最终在日落前来到了青藏铁路二期起点、青海第二大城市——格尔木。&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://raw.githubusercontent.com/LeeKrSe/TravelToNorthWest/master/photo/xibei/06/gonglu01.jpg&quot; alt=&quot;柴达木公路&quot; title=&quot;柴达木公路&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://raw.githubusercontent.com/LeeKrSe/TravelToNorthWest/master/photo/xibei/06/gonglu02.jpg&quot; alt=&quot;柴达木公路&quot; title=&quot;柴达木公路&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;这一日赶了有六百来公里路，车上学霸想上厕所，百里无人的高速上又难以找到，于是我说了句，忍一忍吧，这一忍，忍了近三百公里，等到达格尔木时，估摸着她已经到了轻轻一按就能放出水来的地步。接下来的一路上，我都被“忍一忍”几个字所吐槽。&lt;/p&gt;
+
+&lt;h2 id=&quot;七-可可西里与高反的抗争&quot;&gt;七.	可可西里，与“高反”的抗争&lt;/h2&gt;
+&lt;p&gt;从格尔木往南就是进藏的公路，路过昆仑山口后有一处路卡，对进藏车辆查得很严，大货车的长队排了好几公里，我也是头一次看到这么多的东风重卡和解放重卡。&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://raw.githubusercontent.com/LeeKrSe/TravelToNorthWest/master/photo/xibei/07/kunlun01.jpg&quot; alt=&quot;兰州第一面&quot; title=&quot;鸿宾楼&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://raw.githubusercontent.com/LeeKrSe/TravelToNorthWest/master/photo/xibei/07/kunlun03.jpg&quot; alt=&quot;兰州第一面&quot; title=&quot;鸿宾楼&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;前往昆仑神泉的路上，我们在骆驼峰和一处供奉着西王母的神殿略作停留，然后才到达神泉。这是一眼四季不冻的冷泉，据说含有丰富的矿物质，但不知碍于什么，我们大家都只尝了一小口，现在想来着实可惜。季师傅在这里雅兴大发，不停地找角度为我们大家拍照，甚至为了拍女生们飞起来的照片趴在了地上，被大家称为敬业的摄影师。&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://raw.githubusercontent.com/LeeKrSe/TravelToNorthWest/master/photo/xibei/07/kunlun02.jpg&quot; alt=&quot;兰州第一面&quot; title=&quot;鸿宾楼&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://raw.githubusercontent.com/LeeKrSe/TravelToNorthWest/master/photo/xibei/07/kunlun04.jpg&quot; alt=&quot;兰州第一面&quot; title=&quot;鸿宾楼&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://raw.githubusercontent.com/LeeKrSe/TravelToNorthWest/master/photo/xibei/07/shenquan01.jpg&quot; alt=&quot;兰州第一面&quot; title=&quot;鸿宾楼&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://raw.githubusercontent.com/LeeKrSe/TravelToNorthWest/master/photo/xibei/07/shenquan02.jpeg&quot; alt=&quot;兰州第一面&quot; title=&quot;鸿宾楼&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://raw.githubusercontent.com/LeeKrSe/TravelToNorthWest/master/photo/xibei/07/shenquan03.jpeg&quot; alt=&quot;兰州第一面&quot; title=&quot;鸿宾楼&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;再往南走，海拔开始不断的上升。沿途发现了成群的藏野驴、野骆驼、野狗，还有前往布达拉宫朝圣的藏民。到达可可西里自然保护区入口时，海拔已经4800米了，苾湲和学霸开始有了缺氧反应，加上温度接近零度，风还特别大，最后大家哆嗦得坐在塑像前合了个影。&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://raw.githubusercontent.com/LeeKrSe/TravelToNorthWest/master/photo/xibei/07/keke01.jpg&quot; alt=&quot;兰州第一面&quot; title=&quot;鸿宾楼&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;多年前有一部电影叫做《可可西里》，它给我印象最深刻的是盗猎者对藏羚羊无情的屠杀，还有与盗猎者殊死搏斗的巡山队员。如今的可可西里对藏羚羊的保护已经非常到位了，青藏铁路过境还想了各种方法为藏羚羊的迁徙留出了道路。然而不幸的是我们一路上没有看到藏羚羊，季师傅说现在正好是产仔的季节，加上可可西里十分广袤，沿着公路看到藏羚羊的几率不大。&lt;/p&gt;
+
+&lt;p&gt;约摸行了二三十公里，到达一处观景台，这里向南望去是雄伟的唐古拉山脉，向北望去是巍峨的昆仑山脉，而我们正好处在之间的大平原上。此时苾湲和学霸高原反应已经到了行动不便的地步了，于是稍作停留，我们便踏上了回程。回去的车上，我们三个男生挤到了车厢后排狭小的空间里，应该是车窗关着的缘故，回到可可西里入口的时候，季师傅也有些高反了，于是停下车来休息了十分钟。然而停在海拔4800米的地方，该高反的始终是高反的，在尚广的建议下季师傅强忍着高反点了火，往更低的地方开去。说也奇怪，到了海拔4600米左右以后，大家的高反症状都减弱了，随着海拔的继续下降，几位高反的同学又满血复活了。&lt;/p&gt;
+
+&lt;h2 id=&quot;八-柴达木水上雅丹与魔鬼城&quot;&gt;八.	柴达木，水上雅丹与“魔鬼城”&lt;/h2&gt;
+&lt;p&gt;如果说这一路有什么景色让人最为震撼，那就是青海的雅丹地貌。&lt;/p&gt;
+
+&lt;p&gt;在格尔木用完早饭，就又开始了长途跋涉，从格尔木返回小柴旦立交两百公里，再向西两百公里，一路仍然是柴达木的戈壁风光，青色的柏油马路穿插在渺无人烟的金黄色的戈壁滩上，也是一道靓丽的风景。&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://raw.githubusercontent.com/LeeKrSe/TravelToNorthWest/master/photo/xibei/08/shamo01.jpg&quot; alt=&quot;兰州第一面&quot; title=&quot;鸿宾楼&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://raw.githubusercontent.com/LeeKrSe/TravelToNorthWest/master/photo/xibei/08/shamo02.jpg&quot; alt=&quot;兰州第一面&quot; title=&quot;鸿宾楼&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://raw.githubusercontent.com/LeeKrSe/TravelToNorthWest/master/photo/xibei/08/shamo03.jpg&quot; alt=&quot;兰州第一面&quot; title=&quot;鸿宾楼&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://raw.githubusercontent.com/LeeKrSe/TravelToNorthWest/master/photo/xibei/08/shamo04.jpg&quot; alt=&quot;兰州第一面&quot; title=&quot;鸿宾楼&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://raw.githubusercontent.com/LeeKrSe/TravelToNorthWest/master/photo/xibei/08/shamo05.jpg&quot; alt=&quot;兰州第一面&quot; title=&quot;鸿宾楼&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;大约到了下午两点，我们来到了东台吉乃尔湖——水上雅丹。碧绿的湖水，风蚀的雅丹地貌，加上湛蓝的天空，色彩调和得恰到好处。登上一座雅丹山丘，远眺整个湖面，不由被大自然的鬼斧神工所震撼。&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://raw.githubusercontent.com/LeeKrSe/TravelToNorthWest/master/photo/xibei/08/shuishang01.jpeg&quot; alt=&quot;兰州第一面&quot; title=&quot;鸿宾楼&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://raw.githubusercontent.com/LeeKrSe/TravelToNorthWest/master/photo/xibei/08/shuishang02.jpg&quot; alt=&quot;兰州第一面&quot; title=&quot;鸿宾楼&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://raw.githubusercontent.com/LeeKrSe/TravelToNorthWest/master/photo/xibei/08/shuishang05.jpg&quot; alt=&quot;兰州第一面&quot; title=&quot;鸿宾楼&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;学霸兴奋得有点忘我，刚换上了拖鞋就准备下水，结果一脚踩进了烂泥滩，弄得一脚泥巴。好不容易洗洗干净，换个地方又激动起来，结果没出意外又陷进了泥潭。众人排成一列，你拉我我拉你才把她和她的拖鞋拽了出来。季师傅掏出他的手机，开始给我们拍他的拿手绝活——空中飞人。在浅滩，在岸边，在崖壁上，大家都陶醉在这壮丽的景色之中。&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://raw.githubusercontent.com/LeeKrSe/TravelToNorthWest/master/photo/xibei/08/shuishang03.jpg&quot; alt=&quot;兰州第一面&quot; title=&quot;鸿宾楼&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://raw.githubusercontent.com/LeeKrSe/TravelToNorthWest/master/photo/xibei/08/shuishang04.jpg&quot; alt=&quot;兰州第一面&quot; title=&quot;鸿宾楼&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;从水上雅丹出来，轻车熟路的季师傅带我们来到了另一处雅丹地貌——青海魔鬼城。没有湖泊，这里的雅丹显得格外阴森，像猫头鹰，像大猩猩，一个个山丘朝着相同的方向，仿佛一群正赴宴的魔鬼。往深处走了约五百米，季师傅说不能再走了，走远了，遇到了狼就危险了。&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://raw.githubusercontent.com/LeeKrSe/TravelToNorthWest/master/photo/xibei/08/yadan01.jpg&quot; alt=&quot;兰州第一面&quot; title=&quot;鸿宾楼&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://raw.githubusercontent.com/LeeKrSe/TravelToNorthWest/master/photo/xibei/08/yadan02.jpg&quot; alt=&quot;兰州第一面&quot; title=&quot;鸿宾楼&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;站在山头，顶天立地，是摄影的绝佳地点，在给众人拍完照后，学霸想让人给她拍几张“美美哒”，我便信誓旦旦地接过了手机，一阵啪啪啪后我们回到了车上，这时学霸才想起来看照片，不看不知道，一看吓一跳，在我的镜头下，水桶腰、小粗腿，应有尽有。&lt;/p&gt;
+
+&lt;p&gt;沿西砂线继续行驶，看到了好多散养的骆驼，到了傍晚，到达了今日的终点——大柴旦镇，一座被旅游业拉起来的小镇。&lt;/p&gt;
+
+&lt;h2 id=&quot;九-敦煌沙漠中的一片绿洲&quot;&gt;九.	敦煌，沙漠中的一片绿洲&lt;/h2&gt;
+
+&lt;p&gt;早晨从大柴旦出发，来到镇外的一片盐湖，这湖中的盐已经完全析出结成了晶体，湖水也是蓝绿色，白白的盐，绿绿的水，以及身后连绵的祁连山脉，远景近景浑然一体。&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://raw.githubusercontent.com/LeeKrSe/TravelToNorthWest/master/photo/xibei/09/dachaidan01.jpg&quot; alt=&quot;兰州第一面&quot; title=&quot;鸿宾楼&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;从大柴旦往敦煌的路程有五六百公里，途经有“最美公路”之称的G3011，可惜天公不做美，常年缺水的大西北此时竟乌云密布，不多时便风雨大作。过当金山时，在山上飘起了鹅毛大雪，到了山脚又是瓢泼大雨，原本计划前往阿克塞石油小镇一睹九层妖塔取景地也只好作罢。来到阿克塞新城，由于常年缺水，城市并未规划排水系统，道路两旁的自行车道便成了小河。&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://raw.githubusercontent.com/LeeKrSe/TravelToNorthWest/master/photo/xibei/09/dangjinshan01.jpeg&quot; alt=&quot;兰州第一面&quot; title=&quot;鸿宾楼&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;继续往北，雨终于停了下来，此时车窗两边的景色与青海境内全然不同，我们才意识到已经到了甘肃。甘肃西北是河西走廊的尽头，也是一个极为缺水的地区，有着敦煌“母亲河”之称的党河，在这个汛期却早已干涸。敦煌四周被沙漠环绕，长年以来依赖着党河和拉哈诺尔湖，这里的人们才代代繁衍下去。&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://raw.githubusercontent.com/LeeKrSe/TravelToNorthWest/master/photo/xibei/09/danghe01.jpeg&quot; alt=&quot;兰州第一面&quot; title=&quot;鸿宾楼&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;傍晚，季师傅带我们来到了沙洲夜市，说要请我们吃一顿大餐。我们倒也不客气，牛肉串，大盘鸡，炕锅羊肉，土豆片（噢，每个菜里都是土豆，于是我们给羞涩的“温半城”尚广盛了好几碗土豆），大盘鸡里有一个鸡头，学霸问了句，鸡头能吃吗？众人摇摇头，我说，难道不能吃吗？于是碗里被众人强行塞了鸡头T_T，塞就塞吧，作为一个四川人，从小就没少吃过鸡头，在这里就趁机表演了一吧快速吃鸡头的“绝技”，看得其他人目瞪口呆。&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://raw.githubusercontent.com/LeeKrSe/TravelToNorthWest/master/photo/xibei/09/dunhuang01.jpg&quot; alt=&quot;兰州第一面&quot; title=&quot;鸿宾楼&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;翌日，师傅一早将我们送到了莫高窟景区。莫高窟分为两个部分，第一部分是在售票处的影像陈列馆内看两部关于敦煌起源和莫高窟由来的纪录片，随后才乘景区巴士到莫高窟景区参观。&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://raw.githubusercontent.com/LeeKrSe/TravelToNorthWest/master/photo/xibei/09/mogaoku01.jpg&quot; alt=&quot;兰州第一面&quot; title=&quot;莫高窟&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://raw.githubusercontent.com/LeeKrSe/TravelToNorthWest/master/photo/xibei/09/mogaoku02.jpg&quot; alt=&quot;兰州第一面&quot; title=&quot;鸿宾楼&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;敦煌莫高窟是古代中国佛教文化的瑰宝，历经南北朝、隋唐、五代十国、西夏、元朝近千年的积淀，形成了这座具有数百石窟、数千彩塑的“千佛洞”，为考古学界研究历代文化留下了宝贵的财富。导游带领我们观赏了九层塔和其他几个不同年代的洞窟，讲解了不同时期的塑像特点和礼佛文化，最后来到了窟群尽头的藏经洞。&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://raw.githubusercontent.com/LeeKrSe/TravelToNorthWest/master/photo/xibei/09/mogaoku03.jpg&quot; alt=&quot;兰州第一面&quot; title=&quot;鸿宾楼&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;高中时，语文老师讲余秋雨的《文化苦旅》，讲到《道士塔》，让我认识了一个有眼无珠，唯利是图，将国宝贱卖给洋人的道士——王圆箓。然而这次前来，讲解员讲到王道士时，说，其实最开始王道士发现藏经洞时也曾奔走当地各级衙门寻求保护，可是晚清官员昏朽至极，对其价值一无所知，还屡屡让王道士向其“献宝”。后来来了斯坦因，来了伯希，他们对藏经洞文物极为珍视，王道士才将文物出售，换得银两用来修缮其他洞窟。虽说王道士的善举远不足以弥补其犯下的错，然在那个动荡的岁月，“道士塔”的悲剧实乃时代的悲剧。&lt;/p&gt;
+
+&lt;p&gt;时值六月，夏至未至，烈日却一点也不谦让，不像青海的高原气候，敦煌整个城市都暴露在炙热的骄阳下。从莫高窟出来的时候，学霸整个人仿佛要挂掉了，然而等坐上了大巴，回到了季师傅的车上，整个人又好了。中午回到城里，我们吃到了一路上最棒的一餐，靖远尕六羊羔肉，随后回了客栈休息，到晚上6点，向敦煌的最后一个景点——鸣沙山出发。&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://raw.githubusercontent.com/LeeKrSe/TravelToNorthWest/master/photo/xibei/09/mingshashan04.jpg&quot; alt=&quot;兰州第一面&quot; title=&quot;鸿宾楼&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://raw.githubusercontent.com/LeeKrSe/TravelToNorthWest/master/photo/xibei/09/mingshashan02.jpg&quot; alt=&quot;兰州第一面&quot; title=&quot;鸿宾楼&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;鸣沙山位于敦煌城南，离我们住宿的“月笼沙”客栈不远，骑骆驼、滑沙、登沙山、看日落、聆听月牙泉是主要的玩点。夏季的大西北白昼都很长，而敦煌是我们此行日落时间最晚的地方，一来是经度位于环线的最西边，日落最晚；二来是纬度位于环线的最北边，白昼最长。我们在山丘上等到了晚上10点才看到太阳一点点收拢它的光辉，沉没在无边的黑夜里。&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://raw.githubusercontent.com/LeeKrSe/TravelToNorthWest/master/photo/xibei/09/mingshashan01.jpeg&quot; alt=&quot;兰州第一面&quot; title=&quot;鸿宾楼&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://raw.githubusercontent.com/LeeKrSe/TravelToNorthWest/master/photo/xibei/09/mingshashan03.jpg&quot; alt=&quot;兰州第一面&quot; title=&quot;鸿宾楼&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;从鸣沙山出来，季师傅带我们到月牙泉小镇吃夜宵，炒面片加红木烤肉，直到深夜才返回客栈，进入甜美的梦乡。&lt;/p&gt;
+
+&lt;h2 id=&quot;十-跋涉河西走廊&quot;&gt;十.	跋涉河西走廊&lt;/h2&gt;
+&lt;p&gt;说到河西走廊，我的第一印象是王维《使至塞上》中“大漠孤烟直，长河落日圆”的景象，王摩诘寥寥数句，勾勒出塞上壮阔雄奇的风光，把自己心中的凄凉融汇到这景色之中，成为千古流传的名篇。而河西走廊，这条狭长的通道千百年来都是连接中原和西域的命脉，也是无数文人墨客慨叹的地方。&lt;/p&gt;
+
+&lt;p&gt;从敦煌出发，全程高速，不多时便到了以生产瓜果出名的瓜州，季师傅带我们来到高速路边一个开着十来家瓜果店的地方，这些店老板倒是蛮热情，吆喝着让我们去品尝，不过大家心里也有数，尝了不买肯定是不行的。所以最后我们只尝了一家的瓜果，然后稍微买了点特色干果和黄河蜜带了走，价格嘛，其实比城里要贵一点点。&lt;/p&gt;
+
+&lt;p&gt;瓜洲向东南，是“春风不度玉门关”的玉门，再往东，就到了长城的起点——嘉峪关。嘉峪关号称“天下第一雄关”，由明代开国大将冯胜选址建关，西临玉门，背靠酒泉，是明代西北边陲的要塞，也是中国最大的关隘。&lt;/p&gt;
+
+&lt;p&gt;到嘉峪关时正值正午，艳阳高照，大伙儿也是把自己围得严严实实。从正门进入景区，首先映入眼帘的是九眼泉湖，湖虽不大，却在炎炎夏日给人一种清凉之感。沿湖行约一公里，才到达主体景区。刚开始是一些石碑和介绍，讲述嘉峪关建关以来的风风雨雨，以及明长城的主要关口，再往前几百米，才到达嘉峪关下。&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://raw.githubusercontent.com/LeeKrSe/TravelToNorthWest/master/photo/xibei/10/jiayuguan01.jpeg&quot; alt=&quot;兰州第一面&quot; title=&quot;鸿宾楼&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://raw.githubusercontent.com/LeeKrSe/TravelToNorthWest/master/photo/xibei/10/jiayuguan02.jpg&quot; alt=&quot;兰州第一面&quot; title=&quot;鸿宾楼&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;我到过险峻的剑门关，蜿蜒的八达岭，以及无数鲜为人知的关隘，它们往往依托地形，成为易守难攻的要冲，但是像嘉峪关这样暴露在平原之上的，还是头一回见到，这是一座以自身的雄伟铸就的天下名关。&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://raw.githubusercontent.com/LeeKrSe/TravelToNorthWest/master/photo/xibei/10/jiayuguan03.jpg&quot; alt=&quot;兰州第一面&quot; title=&quot;鸿宾楼&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://raw.githubusercontent.com/LeeKrSe/TravelToNorthWest/master/photo/xibei/10/jiayuguan04.jpg&quot; alt=&quot;兰州第一面&quot; title=&quot;鸿宾楼&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;从嘉峪关出来，驱车继续向东南，快6点时才到达今日最后一站——张掖七彩丹霞地质公园。由于正赶上世界文化遗产日，丹霞景区门票全免，非常合算。我们乘着景区大巴，在几个观景台间穿梭，这些观景台各有特色，其中最漂亮的，当属4号和五号，七彩的岩层，伴着七彩的热气球，别是一种风情。&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://raw.githubusercontent.com/LeeKrSe/TravelToNorthWest/master/photo/xibei/10/danxia01.jpg&quot; alt=&quot;兰州第一面&quot; title=&quot;鸿宾楼&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://raw.githubusercontent.com/LeeKrSe/TravelToNorthWest/master/photo/xibei/10/danxia02.jpg&quot; alt=&quot;兰州第一面&quot; title=&quot;鸿宾楼&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://raw.githubusercontent.com/LeeKrSe/TravelToNorthWest/master/photo/xibei/10/danxia03.jpg&quot; alt=&quot;兰州第一面&quot; title=&quot;鸿宾楼&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;天色渐晚，从景区出来回道酒店，大伙儿跟季师傅喝起了啤酒，途中我们嚷着让尚广和钱宝宝喝交杯，旁边一桌年过花甲的老人感慨说，年轻真好。用过晚饭，我们在客栈的顶层，看着星星，荡着秋千。&lt;/p&gt;
+
+&lt;h2 id=&quot;十一-祁连高原北边的明珠&quot;&gt;十一.	祁连，高原北边的明珠&lt;/h2&gt;
+&lt;p&gt;从张掖出发，往民乐县的国道绿荫葱葱，早晨的阳光透过树林间的缝隙，还有许多鸟儿在上面飞来飞去。过了民乐县不多久，就来到了今日第一站——扁都口。&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://raw.githubusercontent.com/LeeKrSe/TravelToNorthWest/master/photo/xibei/11/biandukou01.jpg&quot; alt=&quot;兰州第一面&quot; title=&quot;鸿宾楼&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://raw.githubusercontent.com/LeeKrSe/TravelToNorthWest/master/photo/xibei/11/biandukou02.jpg&quot; alt=&quot;兰州第一面&quot; title=&quot;鸿宾楼&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;扁都口是进祁连山的山口，水草丰茂，雪山连绵。再往山中行走，则是一片大峡谷，两侧皆是绝壁，峡间淌一河流，险要之处，颇有一夫当关，万夫莫开之势。&lt;/p&gt;
+
+&lt;p&gt;过扁都峡谷，便是峨堡镇，此时海拔已高，方才在甘肃境内还是夏天模样，到此地众人早已是瑟瑟发抖，妹子们刚一下车就赶紧躲进一家拉面店，吃过午饭，在车里穿好秋裤外套，我们才继续出发。&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://raw.githubusercontent.com/LeeKrSe/TravelToNorthWest/master/photo/xibei/11/qilian03.jpg&quot; alt=&quot;兰州第一面&quot; title=&quot;鸿宾楼&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;从峨堡向西北，过阿柔大寺，一路上皆是辽阔的祁连草原。洁白的羊群，黝黑的牛群，在这里比比皆是。小皮同志在这里异常的兴奋，不断地幻想着要去捉一只小羊抱回车里。季师傅选了处风景较好的地段停了车，又开始给我们拍“空中飞人”了。&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://raw.githubusercontent.com/LeeKrSe/TravelToNorthWest/master/photo/xibei/11/qilian01.jpg&quot; alt=&quot;兰州第一面&quot; title=&quot;鸿宾楼&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://raw.githubusercontent.com/LeeKrSe/TravelToNorthWest/master/photo/xibei/11/qilian02.jpg&quot; alt=&quot;兰州第一面&quot; title=&quot;鸿宾楼&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;快到傍晚时，我们到达了祁连县，这时天空下起了中雨，让我们不得不取消了去卓尔山的计划。到宾馆稍作歇息，出门用过晚饭，我们来到祁连县的瑞士小镇。这里的建筑很有中欧气息，街道中央还有各种凸显异域风情的雕塑。穿过小镇是湍急的黑河，河上有一座廊桥，穿过廊桥又是一片郁郁的林荫。暮色，霞光，雪山，流水，构成了祁连这幅美丽的画卷，驻足仰望，轻倚栏杆，静静的聆听小城美丽的夜晚。&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://raw.githubusercontent.com/LeeKrSe/TravelToNorthWest/master/photo/xibei/11/qilian04.jpg&quot; alt=&quot;兰州第一面&quot; title=&quot;祁连&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://raw.githubusercontent.com/LeeKrSe/TravelToNorthWest/master/photo/xibei/11/qilian05.jpg&quot; alt=&quot;兰州第一面&quot; title=&quot;鸿宾楼&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://raw.githubusercontent.com/LeeKrSe/TravelToNorthWest/master/photo/xibei/11/qilian06.jpg&quot; alt=&quot;兰州第一面&quot; title=&quot;鸿宾楼&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;翌日清晨，用过早点，又踏上了前往八一冰川的旅程。车从祁连县驶出，不远处是绮丽的黑河大峡谷，峡谷中道路蜿蜒，河流迎面向我们奔涌而来，河对岸是笔直的峭壁，却有不少不屈的苍松在悬壁上傲然挺立。&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://raw.githubusercontent.com/LeeKrSe/TravelToNorthWest/master/photo/xibei/11/qilian07.jpg&quot; alt=&quot;兰州第一面&quot; title=&quot;鸿宾楼&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://raw.githubusercontent.com/LeeKrSe/TravelToNorthWest/master/photo/xibei/11/qilian08.jpg&quot; alt=&quot;兰州第一面&quot; title=&quot;鸿宾楼&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;出大峡谷，到野牛沟，又是辽阔的祁连草原，不知开了多少里程，道路变成了狭窄的乡间小道，再往前，海拔越来越高。海拔慢慢上了4000，季师傅挺担心妹子们会不会又出现高原反应，到了冰川入口，她们却显得精神抖擞，到处跑着跟路边棉花一样的雪地合影留念。&lt;/p&gt;
+
+&lt;p&gt;往冰川前行的道路盖满了积雪，前约摸行了一两公里，路上的积雪有些融化，行走艰难，我们六人排成长长一列，一个踩着一个脚印慢慢挪动。再往前，雪就积得挺深了。学霸像智障一样对着雪地“噗”的一下就坐了上去，等她站起来，地上出现了一个硕大的雪坑，我也没有闲着，从地上抱起一团积雪就向苾湲和小皮砸去，一砸不要紧，她俩像着了魔似的开始疯狂地反击，学霸见势也加入了战斗，几个人在海拔4600米的地方打起了雪仗。钱宝宝和优雅的尚广不肯帮忙，于是成了三打一的局面，突然，学霸抱起一团雪朝我走来，大约一米的距离使劲砸到了我头上，让我好久都没反应过来，只能申请“停战”。休息一会儿之后，又踏上前往冰川的行程。&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://raw.githubusercontent.com/LeeKrSe/TravelToNorthWest/master/photo/xibei/11/bingchuan01.jpg&quot; alt=&quot;兰州第一面&quot; title=&quot;八一冰川&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://raw.githubusercontent.com/LeeKrSe/TravelToNorthWest/master/photo/xibei/11/bingchuan03.jpg&quot; alt=&quot;兰州第一面&quot; title=&quot;八一冰川&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;在高原上跋涉并不是一件容易的事，氧气、体力都消耗得很快，前面从冰川出来的游客看到我们，给我们打气说，不远了，再走二十分钟就到了。可是就这“二十分钟”路程，我们花了足足两倍时间。等我们到达冰川时，学霸已经不行了，三个女生也没啥拍照的力气了，只坐着来了几张自拍。“八一冰川”本身并没有给人壮丽之感，但往冰川路上跋涉的坚持充满了乐趣，最后我也不会像王安石那样“咎其欲出者”，“悔其随之而不得极夫游之乐也”。&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://raw.githubusercontent.com/LeeKrSe/TravelToNorthWest/master/photo/xibei/11/bingchuan04.jpg&quot; alt=&quot;兰州第一面&quot; title=&quot;八一冰川&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://raw.githubusercontent.com/LeeKrSe/TravelToNorthWest/master/photo/xibei/11/bingchuan05.jpg&quot; alt=&quot;兰州第一面&quot; title=&quot;八一冰川&quot; /&gt;&lt;/p&gt;
+
+&lt;h2 id=&quot;十二-环游的终点&quot;&gt;十二.	环游的终点&lt;/h2&gt;
+&lt;p&gt;时间总是过的飞快，越快乐的时光越如白驹过隙。十天的行程转眼已到最后，从祁连出来，过大冬树垭口，进入金银滩草原，一遍又一遍被神曲“天下最美”所洗脑。&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://raw.githubusercontent.com/LeeKrSe/TravelToNorthWest/master/photo/xibei/12/dadongshu.jpeg&quot; alt=&quot;兰州第一面&quot; title=&quot;大冬树垭口&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;大伙儿好像在前几天用光了所有的力气，一整天几乎都窝在车里不肯下去，再加上天气阴沉，雾气环绕，美丽的金银滩也用面纱遮住了她动人的脸庞。草原上田鼠、野兔、羔羊、牦牛依然随处可见，很快我们就路过了原子城，来到了环游最后一站，湟源县丹葛尔古城。&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://raw.githubusercontent.com/LeeKrSe/TravelToNorthWest/master/photo/xibei/12/dangeer.jpg&quot; alt=&quot;兰州第一面&quot; title=&quot;丹葛尔古城&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;来的时候古城尚在修缮，只是稍微游玩了会儿。据说在清代，这座城池因为地处交通要道异常繁华，又“小北京”之称，而如今繁华落尽，只剩下了岁月的痕迹。在这里观看了酿醋工艺，苾湲“满意地”品尝了牛初乳制成的酸奶，被学霸好好地说教了一番，我们又坐上了车。稍微打了一个盹儿，就回到了西宁。季师傅把我们送到了莫家街的酒店，收拾好东西便道了别，他第二天又有几位甘南的客人接待。&lt;/p&gt;
+
+&lt;p&gt;大伙儿拖着疲惫的身体在酒店睡到了晚上，第三次光顾了莫家街的靖远羊羔肉，到西宁最大的华润万家扫荡了一波特产，第二日又乘动车回到了兰州。在这里做完了学校要求的毕业体检，学霸乘大巴先回靖远的家里去了，而我们剩下的几个人晚上撸了城西的东北烤王，第二日也分别飞往重庆、杭州，这场长达十五天的毕业旅程也就画上圆满的句号。&lt;/p&gt;
+
+</description>
+        <pubDate>Sun, 23 Jul 2017 00:00:00 +0800</pubDate>
+        <link>http://localhost:4000/2017/07/23/%E8%A5%BF%E5%8C%97%E7%8E%AF%E6%B8%B8%E8%AE%B0/</link>
+        <guid isPermaLink="true">http://localhost:4000/2017/07/23/%E8%A5%BF%E5%8C%97%E7%8E%AF%E6%B8%B8%E8%AE%B0/</guid>
+        
+        
+      </item>
+    
+      <item>
+        <title>用lstm预测大盘</title>
+        <description>&lt;p&gt;LSTM是递归神经网络（RNN）的一个变种，相较于RNN而言，解决了记忆消失的问题，用来处理序列问题是一个很好的选择。本文主要介绍如何使用DL4J中的LSTM来执行回归分析，如果只是想通过学习本例来预测股市的筒子，建议还是放弃吧^-^。如果不清楚RNN和LSTM，可以先阅读 LSTM和递归网络教程 以及 通过DL4J使用递归网络 ，特别是不熟悉RNN输入和预测方式的强烈建议先阅读这两个教程。如果不太会建立DL4J的工程，建议在其样例工程中进行本实验。&lt;/p&gt;
+
+&lt;p&gt;言归正传，文本通过使用 LSTM对上证指数历史数据进行回归学习，并给出一个初始序列预测之后20天的大盘收盘价格来演示如何使用LSTM处理简单的序列回归问题。首先是准备数据，可以下载例子中我使用的数据集。那么接下来的问题就分成如下几步：&lt;/p&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;读入训练数据，并处理成一个DataIterator；&lt;/li&gt;
+  &lt;li&gt;构建一个LSTM的递归神经网络；&lt;/li&gt;
+  &lt;li&gt;迭代训练，并输出预测结果；&lt;/li&gt;
+  &lt;li&gt;调参和优化。&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;h3 id=&quot;一处理训练数据&quot;&gt;一.处理训练数据&lt;/h3&gt;
+&lt;p&gt;我们的数据是上证指数每个交易日的基本数据，格式为：&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;股票代码 日期开盘价 收盘价最高价  最低价成交量  成交额涨跌幅
+&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+
+&lt;p&gt;这个文件中的数据是倒序的，也就是说新的数据在最前面，因此在读取数据时需要做一次倒转。我将读取文件的方法放在Dataiterator中。DL4J给出了序列数据处理的DataIterator，但是在本例中我们是自己实现一个DataIterator。代码如下：&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;package edu.zju.cst.krselee.example.stock;
+
+import org.deeplearning4j.datasets.iterator.DataSetIterator;
+import org.nd4j.linalg.api.ndarray.INDArray;
+import org.nd4j.linalg.dataset.DataSet;
+import org.nd4j.linalg.dataset.api.DataSetPreProcessor;
+import org.nd4j.linalg.factory.Nd4j;
+
+import java.io.BufferedReader;
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.NoSuchElementException;
+
+/**
+ * Created by kexi.lkx on 2016/8/23.
+ */
+public class StockDataIterator  implements DataSetIterator {
+
+    private static final int VECTOR_SIZE = 6;
+    //每批次的训练数据组数
+    private int batchNum;
+
+    //每组训练数据长度(DailyData的个数)
+    private int exampleLength;
+
+    //数据集
+    private List&amp;lt;DailyData&amp;gt; dataList;
+
+    //存放剩余数据组的index信息
+    private List&amp;lt;Integer&amp;gt; dataRecord;
+
+    private double[] maxNum;
+    /**
+     * 构造方法
+     * */
+    public StockDataIterator(){
+        dataRecord = new ArrayList&amp;lt;&amp;gt;();
+    }
+
+    /**
+     * 加载数据并初始化
+     * */
+    public boolean loadData(String fileName, int batchNum, int exampleLength){
+        this.batchNum = batchNum;
+        this.exampleLength = exampleLength;
+        maxNum = new double[6];
+        //加载文件中的股票数据
+        try {
+            readDataFromFile(fileName);
+        }catch (Exception e){
+            e.printStackTrace();
+            return false;
+        }
+        //重置训练批次列表
+        resetDataRecord();
+        return true;
+    }
+
+    /**
+     * 重置训练批次列表
+     * */
+    private void resetDataRecord(){
+        dataRecord.clear();
+        int total = dataList.size()/exampleLength+1;
+        for( int i=0; i&amp;lt;total; i++ ){
+            dataRecord.add(i * exampleLength);
+        }
+    }
+
+    /**
+     * 从文件中读取股票数据
+     * */
+    public List&amp;lt;DailyData&amp;gt; readDataFromFile(String fileName) throws IOException{
+        dataList = new ArrayList&amp;lt;&amp;gt;();
+        FileInputStream fis = new FileInputStream(fileName);
+        BufferedReader in = new BufferedReader(new InputStreamReader(fis,&quot;UTF-8&quot;));
+        String line = in.readLine();
+        for(int i=0;i&amp;lt;maxNum.length;i++){
+            maxNum[i] = 0;
+        }
+        System.out.println(&quot;读取数据..&quot;);
+        while(line!=null){
+            String[] strArr = line.split(&quot;,&quot;);
+            if(strArr.length&amp;gt;=7) {
+                DailyData data = new DailyData();
+                //获得最大值信息，用于归一化
+                double[] nums = new double[6];
+                for(int j=0;j&amp;lt;6;j++){
+                    nums[j] = Double.valueOf(strArr[j+2]);
+                    if( nums[j]&amp;gt;maxNum[j] ){
+                        maxNum[j] = nums[j];
+                    }
+                }
+                //构造data对象
+                data.setOpenPrice(Double.valueOf(nums[0]));
+                data.setCloseprice(Double.valueOf(nums[1]));
+                data.setMaxPrice(Double.valueOf(nums[2]));
+                data.setMinPrice(Double.valueOf(nums[3]));
+                data.setTurnover(Double.valueOf(nums[4]));
+                data.setVolume(Double.valueOf(nums[5]));
+                dataList.add(data);
+
+            }
+            line = in.readLine();
+        }
+        in.close();
+        fis.close();
+        System.out.println(&quot;反转list...&quot;);
+        Collections.reverse(dataList);
+        return dataList;
+    }
+
+    public double[] getMaxArr(){
+        return this.maxNum;
+    }
+
+    public void reset(){
+        resetDataRecord();
+    }
+
+    public boolean hasNext(){
+        return dataRecord.size() &amp;gt; 0;
+    }
+
+    public DataSet next(){
+        return next(batchNum);
+    }
+
+    /**
+     * 获得接下来一次的训练数据集
+     * */
+    public DataSet next(int num){
+        if( dataRecord.size() &amp;lt;= 0 ) {
+            throw new NoSuchElementException();
+        }
+        int actualBatchSize = Math.min(num, dataRecord.size());
+        int actualLength = Math.min(exampleLength,dataList.size()-dataRecord.get(0)-1);
+        INDArray input = Nd4j.create(new int[]{actualBatchSize,VECTOR_SIZE,actualLength}, 'f');
+        INDArray label = Nd4j.create(new int[]{actualBatchSize,1,actualLength}, 'f');
+        DailyData nextData = null,curData = null;
+        //获取每批次的训练数据和标签数据
+        for(int i=0;i&amp;lt;actualBatchSize;i++){
+            int index = dataRecord.remove(0);
+            int endIndex = Math.min(index+exampleLength,dataList.size()-1);
+            curData = dataList.get(index);
+            for(int j=index;j&amp;lt;endIndex;j++){
+                //获取数据信息
+                nextData = dataList.get(j+1);
+                //构造训练向量
+                int c = endIndex-j-1;
+                input.putScalar(new int[]{i, 0, c}, curData.getOpenPrice()/maxNum[0]);
+                input.putScalar(new int[]{i, 1, c}, curData.getCloseprice()/maxNum[1]);
+                input.putScalar(new int[]{i, 2, c}, curData.getMaxPrice()/maxNum[2]);
+                input.putScalar(new int[]{i, 3, c}, curData.getMinPrice()/maxNum[3]);
+                input.putScalar(new int[]{i, 4, c}, curData.getTurnover()/maxNum[4]);
+                input.putScalar(new int[]{i, 5, c}, curData.getVolume()/maxNum[5]);
+                //构造label向量
+                label.putScalar(new int[]{i, 0, c}, nextData.getCloseprice()/maxNum[1]);
+                curData = nextData;
+            }
+            if(dataRecord.size()&amp;lt;=0) {
+                break;
+            }
+        }
+
+        return new DataSet(input, label);
+    }
+
+    public int batch() {
+        return batchNum;
+    }
+
+    public int cursor() {
+        return totalExamples() - dataRecord.size();
+    }
+
+    public int numExamples() {
+        return totalExamples();
+    }
+
+    public void setPreProcessor(DataSetPreProcessor preProcessor) {
+        throw new UnsupportedOperationException(&quot;Not implemented&quot;);
+    }
+
+    public int totalExamples() {
+        return (dataList.size()) / exampleLength;
+    }
+
+    public int inputColumns() {
+        return dataList.size();
+    }
+
+    public int totalOutcomes() {
+        return 1;
+    }
+
+    @Override
+    public List&amp;lt;String&amp;gt; getLabels() {
+        throw new UnsupportedOperationException(&quot;Not implemented&quot;);
+    }
+
+    @Override
+    public void remove() {
+        throw new UnsupportedOperationException();
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+
+&lt;p&gt;StockDataIterator实现了DataIterator接口，于是需要实现几个必须的方法，例如hasNext、next、reset……用来进行每一批次DataSet的获取，loadData和readDataFromFile用来获取数据，并保存在一个DailyData类型的List中，每次调用next方法时，就会从List取出当前需要的数据，并构造成DataSet，返回给调用者。DailyData的实现如下：&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;package edu.zju.cst.krselee.example.stock;
+
+/**
+ * Created by kexi.lkx on 2016/8/23.
+ */
+public class DailyData {
+
+    //开盘价
+    private double openPrice;
+    //收盘价
+    private double closeprice;
+    //最高价
+    private double maxPrice;
+    //最低价
+    private double minPrice;
+    //成交量
+    private double turnover;
+    //成交额
+    private double volume;
+
+    public double getTurnover() {
+
+        return turnover;
+    }
+
+    public double getVolume() {
+        return volume;
+    }
+
+    public DailyData(){
+
+    }
+
+    public double getOpenPrice() {
+        return openPrice;
+    }
+
+    public double getCloseprice() {
+        return closeprice;
+    }
+
+    public double getMaxPrice() {
+        return maxPrice;
+    }
+
+    public double getMinPrice() {
+        return minPrice;
+    }
+
+    public void setOpenPrice(double openPrice) {
+        this.openPrice = openPrice;
+    }
+
+    public void setCloseprice(double closeprice) {
+        this.closeprice = closeprice;
+    }
+
+    public void setMaxPrice(double maxPrice) {
+        this.maxPrice = maxPrice;
+    }
+
+    public void setMinPrice(double minPrice) {
+        this.minPrice = minPrice;
+    }
+
+    public void setTurnover(double turnover) {
+        this.turnover = turnover;
+    }
+
+    public void setVolume(double volume) {
+        this.volume = volume;
+    }
+
+    @Override
+    public String toString(){
+        StringBuilder builder = new StringBuilder();
+        builder.append(&quot;开盘价=&quot;+this.openPrice+&quot;, &quot;);
+        builder.append(&quot;收盘价=&quot;+this.closeprice+&quot;, &quot;);
+        builder.append(&quot;最高价=&quot;+this.maxPrice+&quot;, &quot;);
+        builder.append(&quot;最低价=&quot;+this.minPrice+&quot;, &quot;);
+        builder.append(&quot;成交量=&quot;+this.turnover+&quot;, &quot;);
+        builder.append(&quot;成交额=&quot;+this.volume);
+        return builder.toString();
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+
+&lt;p&gt;代码中对数据的各个维度进行了归一化处理，方法是记录每个维度的最大值，构造特征向量与标签时用原始数值除以最大值，得到0-1之间的数，归一化的好处在于使训练过程收敛变快。读者也可以试试不归一化的情况，比较两者的差别。&lt;/p&gt;
+
+&lt;h3 id=&quot;二构建lstm网络&quot;&gt;二.构建LSTM网络&lt;/h3&gt;
+&lt;p&gt;本例中我构造了一个两个隐含层的LSTM网络，隐含层激活函数是tanh，输出层使用identity函数来执行回归（如果是做多分类一般用softmax，做二分类可以用sigmoid）。输入单元数为6，因为单个向量是6维的（开盘价、收盘价、最高价、最低价、成交量、成交额）；输出单元数为1，用于预测第二天收盘价，代码如下：&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;    private static final int IN_NUM = 6;
+    private static final int OUT_NUM = 1;
+    private static final int Epochs = 100;
+
+    private static final int lstmLayer1Size = 50;
+    private static final int lstmLayer2Size = 100;
+
+    public static MultiLayerNetwork getNetModel(int nIn,int nOut){
+        MultiLayerConfiguration conf = new NeuralNetConfiguration.Builder()
+            .optimizationAlgo(OptimizationAlgorithm.STOCHASTIC_GRADIENT_DESCENT).iterations(1)
+            .learningRate(0.1)
+            .rmsDecay(0.5)
+            .seed(12345)
+            .regularization(true)
+            .l2(0.001)
+            .weightInit(WeightInit.XAVIER)
+            .updater(Updater.RMSPROP)
+            .list()
+            .layer(0, new GravesLSTM.Builder().nIn(nIn).nOut(lstmLayer1Size)
+                .activation(&quot;tanh&quot;).build())
+            .layer(1, new GravesLSTM.Builder().nIn(lstmLayer1Size).nOut(lstmLayer2Size)
+                .activation(&quot;tanh&quot;).build())
+            .layer(2, new RnnOutputLayer.Builder(LossFunctions.LossFunction.MSE).activation(&quot;identity&quot;)
+                .nIn(lstmLayer2Size).nOut(nOut).build())
+            .pretrain(false).backprop(true)
+            .build();
+
+        MultiLayerNetwork net = new MultiLayerNetwork(conf);
+        net.init();
+        net.setListeners(new ScoreIterationListener(1));
+
+        return net;
+    }
+&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+
+&lt;p&gt;这段代码中有很多参数可以进行调整来寻找最优的拟合效果或调整训练速率，比如隐含层单元数目、激活函数、学习速率、正则化因子……构造好网络后加入一个ScoreIterationListener来监听每次迭代训练后的得分。&lt;/p&gt;
+
+&lt;h3 id=&quot;三执行迭代训练&quot;&gt;三.执行迭代训练&lt;/h3&gt;
+&lt;p&gt;第二部分里面我们设置了完整训练集的迭代次数Epochs为100，表示用整个数据集反复训练100次，训练部分代码如下：&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt; public static void train(MultiLayerNetwork net,StockDataIterator iterator){
+        //迭代训练
+        for(int i=0;i&amp;lt;Epochs;i++) {
+            DataSet dataSet = null;
+            while (iterator.hasNext()) {
+                dataSet = iterator.next();
+                net.fit(dataSet);
+            }
+            iterator.reset();
+            System.out.println();
+            System.out.println(&quot;=================&amp;gt;完成第&quot;+i+&quot;次完整训练&quot;);
+            INDArray initArray = getInitArray(iterator);
+
+            System.out.println(&quot;预测结果：&quot;);
+            for(int j=0;j&amp;lt;20;j++) {
+                INDArray output = net.rnnTimeStep(initArray);
+                System.out.print(output.getDouble(0)*iterator.getMaxArr()[1]+&quot; &quot;);
+            }
+            System.out.println();
+            net.rnnClearPreviousState();
+        }
+    }
+
+    private static INDArray getInitArray(StockDataIterator iter){
+        double[] maxNums = iter.getMaxArr();
+        INDArray initArray = Nd4j.zeros(1, 6, 1);
+        initArray.putScalar(new int[]{0,0,0}, 3433.85/maxNums[0]);
+        initArray.putScalar(new int[]{0,1,0}, 3445.41/maxNums[1]);
+        initArray.putScalar(new int[]{0,2,0}, 3327.81/maxNums[2]);
+        initArray.putScalar(new int[]{0,3,0}, 3470.37/maxNums[3]);
+        initArray.putScalar(new int[]{0,4,0}, 304197903.0/maxNums[4]);
+        initArray.putScalar(new int[]{0,5,0}, 3.8750365e+11/maxNums[5]);
+        return initArray;
+    }
+      每当进行一次完整集的训练之后，我们初始化了一个初始序列进行预测之后20个序列的输出。整个程序主函数如下：
+
+    public static void main(String[] args) {
+        String inputFile = StockRnnPredict.class.getClassLoader().getResource(&quot;stock/sh000001.csv&quot;).getPath();
+        int batchSize = 1;
+        int exampleLength = 30;
+        //初始化深度神经网络
+        StockDataIterator iterator = new StockDataIterator();
+        iterator.loadData(inputFile,batchSize,exampleLength);
+
+        MultiLayerNetwork net = getNetModel(IN_NUM,OUT_NUM);
+        train(net, iterator);
+    }
+&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+
+&lt;p&gt;迭代100次后，得到的输出序列如下：&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;3489.9679512619973 3516.991701169014 3510.4443733012677 3490.410951650143 3476.138713735342 3469.275475754738 3466.278687063456 3464.9017547094822 3464.2161934530736 3463.8574357616903 3463.670068384409 3463.582194536925 3463.5545977914335 3463.5658543586733 3463.6010765206815 3463.650460170508 3463.7067430067063 3463.764115188122 3463.8196717941764 3463.8705079042916 
+&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+
+&lt;h3 id=&quot;四进一步优化&quot;&gt;四.进一步优化&lt;/h3&gt;
+&lt;p&gt;本文主要介绍DL4J中的LSTM的使用方法，并不是真的说如此就能准确的预测大盘走势了（当然，网络是有可能真的学习到一些大盘走势特征的），想要做预测需要对本例进行许多调整，比如获取更全面的每日大盘信息，选取更多合适的维度来构建特征向量，当然也可以调整预测值（比如涨或跌，做回归的准确性比做二分类差多了，而且有比较好的指标可以衡量模型的好坏），确定目标后可以调整在第二部分提到的那些参数。&lt;/p&gt;
+
+</description>
+        <pubDate>Tue, 23 Aug 2016 00:00:00 +0800</pubDate>
+        <link>http://localhost:4000/2016/08/23/%E7%94%A8LSTM%E9%A2%84%E6%B5%8B%E5%A4%A7%E7%9B%98/</link>
+        <guid isPermaLink="true">http://localhost:4000/2016/08/23/%E7%94%A8LSTM%E9%A2%84%E6%B5%8B%E5%A4%A7%E7%9B%98/</guid>
+        
+        
+      </item>
+    
+  </channel>
+</rss>
