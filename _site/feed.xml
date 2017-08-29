@@ -5,8 +5,8 @@
     <description>Learning, Sharing, and Growing</description>
     <link>http://localhost:4000/</link>
     <atom:link href="http://localhost:4000/feed.xml" rel="self" type="application/rss+xml" />
-    <pubDate>Sun, 27 Aug 2017 23:31:47 +0800</pubDate>
-    <lastBuildDate>Sun, 27 Aug 2017 23:31:47 +0800</lastBuildDate>
+    <pubDate>Wed, 30 Aug 2017 00:13:28 +0800</pubDate>
+    <lastBuildDate>Wed, 30 Aug 2017 00:13:28 +0800</lastBuildDate>
     <generator>Jekyll v3.5.1</generator>
     
       <item>
@@ -1090,6 +1090,245 @@ public class DailyData {
         <guid isPermaLink="true">http://localhost:4000/2016/08/23/%E7%94%A8LSTM%E9%A2%84%E6%B5%8B%E5%A4%A7%E7%9B%98/</guid>
         
         <category>tech</category>
+        
+        
+      </item>
+    
+      <item>
+        <title>Deeplearning4j入门——让计算机阅读《天龙八部》</title>
+        <description>&lt;p&gt;很早在实验室就看见钱宝宝用Google的Word2Vector来跑《天龙八部》，找出与指定词最相关的几个词，最近正好学习新出的深度学习开源项目DeepLearning4J，于是就拿这个例子来练手吧。DL4J的详细用法请看 &lt;a href=&quot;http://deeplearning4j.org/quickstart.html&quot;&gt;DL4J快速入门&lt;/a&gt; 。     &lt;br /&gt;
+DeepLearning4J的Example中自带了很多应用实例，Word2Vector也在其中，因此我的工作主要是以下几步：&lt;/p&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;准备开发环境和原始数据&lt;/li&gt;
+  &lt;li&gt;分词，格式转换&lt;/li&gt;
+  &lt;li&gt;构建Word2Vector模型并训练&lt;/li&gt;
+  &lt;li&gt;测试并输出&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;h2 id=&quot;一准备开发环境和原始数据&quot;&gt;一．准备开发环境和原始数据&lt;/h2&gt;
+&lt;p&gt;开发环境我使用的是IDEA（用eclipse也OK），JDK1.7，Maven3.3.1。
+上武侠小说网下载一篇《天龙八部》，去掉文件首尾的不相关信息，重命名放到指定位置，OK。&lt;/p&gt;
+
+&lt;h2 id=&quot;二分词格式转换&quot;&gt;二．分词、格式转换&lt;/h2&gt;
+&lt;p&gt;我比较喜欢使用复旦NLP，一是用惯了熟练，二是使用起来也方便，Maven引用FNLP有一点小问题，用官方给的maven坐标不能，解决方法可以参考我&lt;a href=&quot;http://blog.csdn.net/a398942089/article/details/51152776&quot;&gt;以前的文章&lt;/a&gt;，这里不再赘述。
+新建Java工程（或者直接使用DL4J-example工程），新建JavaClass，命名为FudanTokenizer：&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;package edu.zju.cst.krselee.example.word2vector;  
+
+/** 
+ * Created by KrseLee on 16/7/20. 
+ */  
+  
+import org.fnlp.nlp.cn.tag.CWSTagger;  
+import org.fnlp.util.exception.LoadModelException;  
+  
+import java.io.IOException;  
+import java.util.List;  
+  
+import org.fnlp.ml.types.Dictionary;  
+import org.fnlp.nlp.corpus.StopWords;  
+
+public class FudanTokenizer {  
+    private CWSTagger tag;  
+  
+    private StopWords stopWords;  
+  
+    public FudanTokenizer() {  
+        String path = this.getClass().getClassLoader().getResource(&quot;&quot;).getPath();  
+        System.out.println(path);  
+        try {  
+            tag = new CWSTagger(path + &quot;models/seg.m&quot;);  
+        } catch (LoadModelException e) {  
+            e.printStackTrace();  
+        }  
+  
+    }  
+  
+    public String processSentence(String context) {  
+        String s = tag.tag(context);  
+        return s;  
+    }  
+  
+    public String processSentence(String sentence, boolean english) {  
+        if (english) {  
+            tag.setEnFilter(true);  
+        }  
+        return tag.tag(sentence);  
+    }  
+  
+    public String processFile(String filename) {  
+        String result = tag.tagFile(filename);  
+  
+        return result;  
+    }  
+  
+    /** 
+     * 设置分词词典 
+     */  
+    public boolean setDictionary() {  
+        String dictPath = this.getClass().getClassLoader().getResource(&quot;models/dict.txt&quot;).getPath();  
+  
+        Dictionary dict = null;  
+        try {  
+            dict = new Dictionary(dictPath);  
+        } catch (IOException e) {  
+            return false;  
+        }  
+        tag.setDictionary(dict);  
+        return true;  
+    }  
+  
+    /** 
+     * 去除停用词 
+     */  
+    public List&amp;lt;String&amp;gt; flitStopWords(String[] words) {  
+        try {  
+            List&amp;lt;String&amp;gt; baseWords = stopWords.phraseDel(words);  
+            return baseWords;  
+        } catch (Exception e) {  
+            e.printStackTrace();  
+            return null;  
+        }  
+    }  
+}  
+&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+
+&lt;p&gt;并将模型文件（可以从&lt;a href=&quot;https://github.com/FudanNLP/fnlp/releases&quot;&gt;FNLP的release页面&lt;/a&gt;下载）拷入到resources目录下。        &lt;br /&gt;
+在maven的pom.xml里面添加FNLP的依赖：&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&amp;lt;dependency&amp;gt;  
+    &amp;lt;groupId&amp;gt;org.fnlp&amp;lt;/groupId&amp;gt;  
+    &amp;lt;artifactId&amp;gt;fnlp-core&amp;lt;/artifactId&amp;gt;  
+    &amp;lt;version&amp;gt;2.1-SNAPSHOT&amp;lt;/version&amp;gt;  
+&amp;lt;/dependency&amp;gt;  
+  
+&amp;lt;dependency&amp;gt;  
+    &amp;lt;groupId&amp;gt;junit&amp;lt;/groupId&amp;gt;  
+    &amp;lt;artifactId&amp;gt;junit&amp;lt;/artifactId&amp;gt;  
+    &amp;lt;version&amp;gt;4.11&amp;lt;/version&amp;gt;  
+&amp;lt;/dependency&amp;gt;  
+&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+
+&lt;p&gt;等Maven把工程编译好，将之前下载的数据文件放到resources目录下，新建一个主方法或者单元测试来执行分词：&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;public void processFile() throws Exception{  
+       String filePath = this.getClass().getClassLoader().getResource(&quot;text/tlbb.txt&quot;).getPath();  
+       BufferedReader in = new BufferedReader(new FileReader(filePath));  
+  
+       File outfile = new File(&quot;/Users/KrseLee/dataset/tlbb_t.txt&quot;);  
+       if (outfile.exists()) {  
+           outfile.delete();  
+       }  
+       FileOutputStream fop = new FileOutputStream(outfile);  
+  
+       // 构建FileOutputStream对象,文件不存在会自动新建  
+       String line = in.readLine();  
+       OutputStreamWriter writer = new OutputStreamWriter(fop, &quot;UTF-8&quot;);  
+       while(line!=null) {  
+           line = tokenizer.processSentence(line);  
+           writer.append(line);  
+           line = in.readLine();  
+       }  
+       in.close();  
+       writer.close(); // 关闭写入流,同时会把缓冲区内容写入文件  
+       fop.close(); // 关闭输出流,释放系统资源  
+   }  
+&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+
+&lt;h2 id=&quot;三构建word2vector模型并训练&quot;&gt;三．构建Word2Vector模型并训练&lt;/h2&gt;
+&lt;p&gt;引入DeepLearning4J的依赖包，新建Java Class ZhWord2Vector，代码如下：&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;package edu.zju.cst.krselee.example.word2vector;  
+  
+import org.canova.api.util.ClassPathResource;  
+import org.deeplearning4j.models.embeddings.loader.WordVectorSerializer;  
+import org.deeplearning4j.models.word2vec.Word2Vec;  
+import org.deeplearning4j.text.sentenceiterator.BasicLineIterator;  
+import org.deeplearning4j.text.sentenceiterator.SentenceIterator;  
+import org.slf4j.Logger;  
+import org.slf4j.LoggerFactory;  
+  
+import java.util.Collection;  
+  
+/** 
+ * Created by KrseLee on 16/7/20. 
+ */  
+public class ZhWord2Vector {  
+    private static Logger log = LoggerFactory.getLogger(ZhWord2Vector.class);  
+  
+    public static void main(String[] args) throws Exception {  
+  
+        String filePath = new ClassPathResource(&quot;text/tlbb_t.txt&quot;).getFile().getAbsolutePath();  
+  
+        log.info(&quot;Load &amp;amp; Vectorize Sentences....&quot;);  
+        // Strip white space before and after for each line  
+        SentenceIterator iter = new BasicLineIterator(filePath);  
+        // Split on white spaces in the line to get words  
+  
+        log.info(&quot;Building model....&quot;);  
+        Word2Vec vec = new Word2Vec.Builder()  
+            .minWordFrequency(5)  
+            .iterations(1)  
+            .layerSize(100)  
+            .seed(42)  
+            .windowSize(5)  
+            .iterate(iter)  
+            .build();  
+  
+        log.info(&quot;Fitting Word2Vec model....&quot;);  
+        vec.fit();  
+  
+        log.info(&quot;Writing word vectors to text file....&quot;);  
+  
+        // Write word vectors  
+        WordVectorSerializer.writeWordVectors(vec, &quot;tlbb_vectors.txt&quot;);  
+        WordVectorSerializer.writeFullModel(vec,&quot;tlbb_model.txt&quot;);  
+        String[] names = {&quot;萧峰&quot;,&quot;乔峰&quot;,&quot;段誉&quot;,&quot;虚竹&quot;,&quot;王语嫣&quot;,&quot;阿紫&quot;,&quot;阿朱&quot;,&quot;木婉清&quot;};  
+        log.info(&quot;Closest Words:&quot;);  
+  
+        for(String name:names) {  
+            System.out.println(name+&quot;&amp;gt;&amp;gt;&amp;gt;&amp;gt;&amp;gt;&amp;gt;&quot;);  
+            Collection&amp;lt;String&amp;gt; lst = vec.wordsNearest(name, 10);  
+            System.out.println(lst);  
+        }  
+    }  
+}  
+&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+
+&lt;p&gt;将上一步得到的输出的分词后的小说文件拷贝到resources目录下，准备工作就完成了。&lt;/p&gt;
+
+&lt;p&gt;##四．测试并输出
+更改你想要查看的单词，运行程序，等待约4分钟，得到输出。不同的电脑因性能原因需要的时间不一致，深度网络的训练本身也是一件费时费力的事情。&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;萧峰&amp;gt;&amp;gt;&amp;gt;&amp;gt;&amp;gt;&amp;gt;  
+[段誉, 叫骂, 一队队, 军官, 将, 狗子, 长矛, 指挥, 说, 传令]  
+乔峰&amp;gt;&amp;gt;&amp;gt;&amp;gt;&amp;gt;&amp;gt;  
+[南, 大侠, 北, 大英雄, 四海, 厮, 听说, 奸谋, 威震, 全舵]  
+段誉&amp;gt;&amp;gt;&amp;gt;&amp;gt;&amp;gt;&amp;gt;  
+[萧峰, 虚竹, 向, 玄渡, 等, 叫骂, 去, 辽兵, 一边, 城门]  
+虚竹&amp;gt;&amp;gt;&amp;gt;&amp;gt;&amp;gt;&amp;gt;  
+[段誉, 向西, 萧峰, 向, 城门, 叫骂, 等, 辽兵, 玄鸣, 去]  
+王语嫣&amp;gt;&amp;gt;&amp;gt;&amp;gt;&amp;gt;&amp;gt;  
+[巴天石, 钟灵, 木婉清, 草海, 朱丹臣, 老婆婆, 瘴气, 贾老者, 嗒嗒嗒, 途中]  
+阿紫&amp;gt;&amp;gt;&amp;gt;&amp;gt;&amp;gt;&amp;gt;  
+[道, 穆贵妃, 抿嘴笑, 姊夫, 来, 叫, 又, 小嘴, 大人, 什么]  
+阿朱&amp;gt;&amp;gt;&amp;gt;&amp;gt;&amp;gt;&amp;gt;  
+[深情, 想起, 换上, 父母, 想念, 恩情, 胡作非为, 迫, 情意, 永远]  
+木婉清&amp;gt;&amp;gt;&amp;gt;&amp;gt;&amp;gt;&amp;gt;  
+[钟灵, 朱丹臣, 巴天石, 秦红棉, 范骅, 一行人, 王语嫣, 墙外, 阮星竹, 巴天]  
+&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+
+&lt;p&gt;好了，大功告成。&lt;/p&gt;
+</description>
+        <pubDate>Wed, 20 Jul 2016 00:00:00 +0800</pubDate>
+        <link>http://localhost:4000/2016/07/20/DeepLearning4J%E5%85%A5%E9%97%A8-%E8%AE%A9%E8%AE%A1%E7%AE%97%E6%9C%BA%E9%98%85%E8%AF%BB-%E5%A4%A9%E9%BE%99%E5%85%AB%E9%83%A8/</link>
+        <guid isPermaLink="true">http://localhost:4000/2016/07/20/DeepLearning4J%E5%85%A5%E9%97%A8-%E8%AE%A9%E8%AE%A1%E7%AE%97%E6%9C%BA%E9%98%85%E8%AF%BB-%E5%A4%A9%E9%BE%99%E5%85%AB%E9%83%A8/</guid>
         
         
       </item>

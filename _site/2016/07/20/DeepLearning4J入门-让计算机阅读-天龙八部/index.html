@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Learning, Sharing, and Growing">
+
+    <title>Deeplearning4j入门——让计算机阅读《天龙八部》 - KrseLee的博客</title>
+
+    <link rel="canonical" href="http://localhost:4000/2016/07/20/DeepLearning4J%E5%85%A5%E9%97%A8-%E8%AE%A9%E8%AE%A1%E7%AE%97%E6%9C%BA%E9%98%85%E8%AF%BB-%E5%A4%A9%E9%BE%99%E5%85%AB%E9%83%A8/">
+
+    <!-- Icons -->
+    <link rel="shortcut icon" href="img/favicon.ico">
+
+    <!-- Bootstrap Core CSS -->
+    <link rel="stylesheet" href="/css/bootstrap.min.css">
+
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="/css/clean-blog.css">
+
+    <!-- Pygments Github CSS -->
+    <link rel="stylesheet" href="/css/syntax.css">
+
+    <!-- Custom Fonts -->
+    <link href="//maxcdn.bootstrapcdn.com/font-awesome/4.3.0/css/font-awesome.min.css" rel="stylesheet" type="text/css">
+    <link href='//fonts.googleapis.com/css?family=Lora:400,700,400italic,700italic' rel='stylesheet' type='text/css'>
+    <link href='//fonts.googleapis.com/css?family=Open+Sans:300italic,400italic,600italic,700italic,800italic,400,300,600,700,800' rel='stylesheet' type='text/css'>
+
+    <!-- HTML5 Shim and Respond.js IE8 support of HTML5 elements and media queries -->
+    <!-- WARNING: Respond.js doesn't work if you view the page via file:// -->
+    <!--[if lt IE 9]>
+        <script src="https://oss.maxcdn.com/libs/html5shiv/3.7.0/html5shiv.js"></script>
+        <script src="https://oss.maxcdn.com/libs/respond.js/1.4.2/respond.min.js"></script>
+    <![endif]-->
+    <script src="/js/jquery.min.js"></script>
+    <script src="/js/bootstrap.min.js"></script>
+</head>
+
+
+
+
+
+
+<body ontouchstart="">
+
+    <!-- Navigation -->
+<nav class="navbar navbar-default navbar-custom navbar-fixed-top">
+    <div class="container-fluid">
+        <!-- Brand and toggle get grouped for better mobile display -->
+        <div class="navbar-header page-scroll">
+            <button type="button" class="navbar-toggle" data-toggle="collapse" data-target="#bs-example-navbar-collapse-1">
+                <span class="sr-only">Toggle navigation</span>
+                <span class="icon-bar"></span>
+                <span class="icon-bar"></span>
+                <span class="icon-bar"></span>
+            </button>
+            <a class="navbar-brand" href="http://krselee.com">我的主页</a>
+        </div>
+
+        <!-- Collect the nav links, forms, and other content for toggling -->
+        <div class="collapse navbar-collapse" id="bs-example-navbar-collapse-1">
+            <ul class="nav navbar-nav navbar-right">
+                <li>
+                    <a href="/">Home</a>
+                </li>
+                
+                <li>
+                    <a href="/about/">About</a>
+                </li>
+                
+                <li>
+                    <a href="/blogs/">技术博客</a>
+                </li>
+                
+                <li>
+                    <a href="/travels/">游记</a>
+                </li>
+                
+            </ul>
+        </div>
+        <!-- /.navbar-collapse -->
+    </div>
+    <!-- /.container -->
+</nav>
+
+
+    <!-- Post Header -->
+<style type="text/css">
+    header.intro-header{
+        background-image: url('/img/green.jpg')
+    }
+</style>
+<header class="intro-header" >
+    <div class="container">
+        <div class="row">
+            <div class="col-lg-8 col-lg-offset-2 col-md-10 col-md-offset-1">
+                <div class="post-heading">
+                    <h1>Deeplearning4j入门——让计算机阅读《天龙八部》</h1>
+                    
+                    <span class="meta">Posted by CnFeat on July 20, 2016</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</header>
+
+
+
+
+<!-- Post Content -->
+<article>
+    <div class="container">
+        <div class="row">
+            <div class="col-lg-8 col-lg-offset-2 col-md-10 col-md-offset-1 post-container">
+
+                <p>很早在实验室就看见钱宝宝用Google的Word2Vector来跑《天龙八部》，找出与指定词最相关的几个词，最近正好学习新出的深度学习开源项目DeepLearning4J，于是就拿这个例子来练手吧。DL4J的详细用法请看 <a href="http://deeplearning4j.org/quickstart.html">DL4J快速入门</a> 。     <br />
+DeepLearning4J的Example中自带了很多应用实例，Word2Vector也在其中，因此我的工作主要是以下几步：</p>
+
+<ol>
+  <li>准备开发环境和原始数据</li>
+  <li>分词，格式转换</li>
+  <li>构建Word2Vector模型并训练</li>
+  <li>测试并输出</li>
+</ol>
+
+<h2 id="一准备开发环境和原始数据">一．准备开发环境和原始数据</h2>
+<p>开发环境我使用的是IDEA（用eclipse也OK），JDK1.7，Maven3.3.1。
+上武侠小说网下载一篇《天龙八部》，去掉文件首尾的不相关信息，重命名放到指定位置，OK。</p>
+
+<h2 id="二分词格式转换">二．分词、格式转换</h2>
+<p>我比较喜欢使用复旦NLP，一是用惯了熟练，二是使用起来也方便，Maven引用FNLP有一点小问题，用官方给的maven坐标不能，解决方法可以参考我<a href="http://blog.csdn.net/a398942089/article/details/51152776">以前的文章</a>，这里不再赘述。
+新建Java工程（或者直接使用DL4J-example工程），新建JavaClass，命名为FudanTokenizer：</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>package edu.zju.cst.krselee.example.word2vector;  
+
+/** 
+ * Created by KrseLee on 16/7/20. 
+ */  
+  
+import org.fnlp.nlp.cn.tag.CWSTagger;  
+import org.fnlp.util.exception.LoadModelException;  
+  
+import java.io.IOException;  
+import java.util.List;  
+  
+import org.fnlp.ml.types.Dictionary;  
+import org.fnlp.nlp.corpus.StopWords;  
+
+public class FudanTokenizer {  
+    private CWSTagger tag;  
+  
+    private StopWords stopWords;  
+  
+    public FudanTokenizer() {  
+        String path = this.getClass().getClassLoader().getResource("").getPath();  
+        System.out.println(path);  
+        try {  
+            tag = new CWSTagger(path + "models/seg.m");  
+        } catch (LoadModelException e) {  
+            e.printStackTrace();  
+        }  
+  
+    }  
+  
+    public String processSentence(String context) {  
+        String s = tag.tag(context);  
+        return s;  
+    }  
+  
+    public String processSentence(String sentence, boolean english) {  
+        if (english) {  
+            tag.setEnFilter(true);  
+        }  
+        return tag.tag(sentence);  
+    }  
+  
+    public String processFile(String filename) {  
+        String result = tag.tagFile(filename);  
+  
+        return result;  
+    }  
+  
+    /** 
+     * 设置分词词典 
+     */  
+    public boolean setDictionary() {  
+        String dictPath = this.getClass().getClassLoader().getResource("models/dict.txt").getPath();  
+  
+        Dictionary dict = null;  
+        try {  
+            dict = new Dictionary(dictPath);  
+        } catch (IOException e) {  
+            return false;  
+        }  
+        tag.setDictionary(dict);  
+        return true;  
+    }  
+  
+    /** 
+     * 去除停用词 
+     */  
+    public List&lt;String&gt; flitStopWords(String[] words) {  
+        try {  
+            List&lt;String&gt; baseWords = stopWords.phraseDel(words);  
+            return baseWords;  
+        } catch (Exception e) {  
+            e.printStackTrace();  
+            return null;  
+        }  
+    }  
+}  
+</code></pre>
+</div>
+
+<p>并将模型文件（可以从<a href="https://github.com/FudanNLP/fnlp/releases">FNLP的release页面</a>下载）拷入到resources目录下。        <br />
+在maven的pom.xml里面添加FNLP的依赖：</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>&lt;dependency&gt;  
+    &lt;groupId&gt;org.fnlp&lt;/groupId&gt;  
+    &lt;artifactId&gt;fnlp-core&lt;/artifactId&gt;  
+    &lt;version&gt;2.1-SNAPSHOT&lt;/version&gt;  
+&lt;/dependency&gt;  
+  
+&lt;dependency&gt;  
+    &lt;groupId&gt;junit&lt;/groupId&gt;  
+    &lt;artifactId&gt;junit&lt;/artifactId&gt;  
+    &lt;version&gt;4.11&lt;/version&gt;  
+&lt;/dependency&gt;  
+</code></pre>
+</div>
+
+<p>等Maven把工程编译好，将之前下载的数据文件放到resources目录下，新建一个主方法或者单元测试来执行分词：</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>public void processFile() throws Exception{  
+       String filePath = this.getClass().getClassLoader().getResource("text/tlbb.txt").getPath();  
+       BufferedReader in = new BufferedReader(new FileReader(filePath));  
+  
+       File outfile = new File("/Users/KrseLee/dataset/tlbb_t.txt");  
+       if (outfile.exists()) {  
+           outfile.delete();  
+       }  
+       FileOutputStream fop = new FileOutputStream(outfile);  
+  
+       // 构建FileOutputStream对象,文件不存在会自动新建  
+       String line = in.readLine();  
+       OutputStreamWriter writer = new OutputStreamWriter(fop, "UTF-8");  
+       while(line!=null) {  
+           line = tokenizer.processSentence(line);  
+           writer.append(line);  
+           line = in.readLine();  
+       }  
+       in.close();  
+       writer.close(); // 关闭写入流,同时会把缓冲区内容写入文件  
+       fop.close(); // 关闭输出流,释放系统资源  
+   }  
+</code></pre>
+</div>
+
+<h2 id="三构建word2vector模型并训练">三．构建Word2Vector模型并训练</h2>
+<p>引入DeepLearning4J的依赖包，新建Java Class ZhWord2Vector，代码如下：</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>package edu.zju.cst.krselee.example.word2vector;  
+  
+import org.canova.api.util.ClassPathResource;  
+import org.deeplearning4j.models.embeddings.loader.WordVectorSerializer;  
+import org.deeplearning4j.models.word2vec.Word2Vec;  
+import org.deeplearning4j.text.sentenceiterator.BasicLineIterator;  
+import org.deeplearning4j.text.sentenceiterator.SentenceIterator;  
+import org.slf4j.Logger;  
+import org.slf4j.LoggerFactory;  
+  
+import java.util.Collection;  
+  
+/** 
+ * Created by KrseLee on 16/7/20. 
+ */  
+public class ZhWord2Vector {  
+    private static Logger log = LoggerFactory.getLogger(ZhWord2Vector.class);  
+  
+    public static void main(String[] args) throws Exception {  
+  
+        String filePath = new ClassPathResource("text/tlbb_t.txt").getFile().getAbsolutePath();  
+  
+        log.info("Load &amp; Vectorize Sentences....");  
+        // Strip white space before and after for each line  
+        SentenceIterator iter = new BasicLineIterator(filePath);  
+        // Split on white spaces in the line to get words  
+  
+        log.info("Building model....");  
+        Word2Vec vec = new Word2Vec.Builder()  
+            .minWordFrequency(5)  
+            .iterations(1)  
+            .layerSize(100)  
+            .seed(42)  
+            .windowSize(5)  
+            .iterate(iter)  
+            .build();  
+  
+        log.info("Fitting Word2Vec model....");  
+        vec.fit();  
+  
+        log.info("Writing word vectors to text file....");  
+  
+        // Write word vectors  
+        WordVectorSerializer.writeWordVectors(vec, "tlbb_vectors.txt");  
+        WordVectorSerializer.writeFullModel(vec,"tlbb_model.txt");  
+        String[] names = {"萧峰","乔峰","段誉","虚竹","王语嫣","阿紫","阿朱","木婉清"};  
+        log.info("Closest Words:");  
+  
+        for(String name:names) {  
+            System.out.println(name+"&gt;&gt;&gt;&gt;&gt;&gt;");  
+            Collection&lt;String&gt; lst = vec.wordsNearest(name, 10);  
+            System.out.println(lst);  
+        }  
+    }  
+}  
+</code></pre>
+</div>
+
+<p>将上一步得到的输出的分词后的小说文件拷贝到resources目录下，准备工作就完成了。</p>
+
+<p>##四．测试并输出
+更改你想要查看的单词，运行程序，等待约4分钟，得到输出。不同的电脑因性能原因需要的时间不一致，深度网络的训练本身也是一件费时费力的事情。</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>萧峰&gt;&gt;&gt;&gt;&gt;&gt;  
+[段誉, 叫骂, 一队队, 军官, 将, 狗子, 长矛, 指挥, 说, 传令]  
+乔峰&gt;&gt;&gt;&gt;&gt;&gt;  
+[南, 大侠, 北, 大英雄, 四海, 厮, 听说, 奸谋, 威震, 全舵]  
+段誉&gt;&gt;&gt;&gt;&gt;&gt;  
+[萧峰, 虚竹, 向, 玄渡, 等, 叫骂, 去, 辽兵, 一边, 城门]  
+虚竹&gt;&gt;&gt;&gt;&gt;&gt;  
+[段誉, 向西, 萧峰, 向, 城门, 叫骂, 等, 辽兵, 玄鸣, 去]  
+王语嫣&gt;&gt;&gt;&gt;&gt;&gt;  
+[巴天石, 钟灵, 木婉清, 草海, 朱丹臣, 老婆婆, 瘴气, 贾老者, 嗒嗒嗒, 途中]  
+阿紫&gt;&gt;&gt;&gt;&gt;&gt;  
+[道, 穆贵妃, 抿嘴笑, 姊夫, 来, 叫, 又, 小嘴, 大人, 什么]  
+阿朱&gt;&gt;&gt;&gt;&gt;&gt;  
+[深情, 想起, 换上, 父母, 想念, 恩情, 胡作非为, 迫, 情意, 永远]  
+木婉清&gt;&gt;&gt;&gt;&gt;&gt;  
+[钟灵, 朱丹臣, 巴天石, 秦红棉, 范骅, 一行人, 王语嫣, 墙外, 阮星竹, 巴天]  
+</code></pre>
+</div>
+
+<p>好了，大功告成。</p>
+
+
+                <hr>
+
+                <ul class="pager">
+                    
+                    
+                    <li class="next">
+                        <a href="/2016/08/23/%E7%94%A8LSTM%E9%A2%84%E6%B5%8B%E5%A4%A7%E7%9B%98/" data-toggle="tooltip" data-placement="top" title="DL4J学习——用LSTM预测大盘">Next Post &rarr;</a>
+                    </li>
+                    
+                </ul>
+
+                <!-- Duoshuo Share start -->
+                <style>
+                    .ds-share{
+                        text-align: right;
+                    }
+                    
+                    @media only screen and (max-width: 700px) {
+                        .ds-share {
+
+                        }
+                    }
+                </style>
+
+                <div class="ds-share"
+                    data-thread-key="/2016/07/20/DeepLearning4J入门——让计算机阅读《天龙八部》" data-title="Deeplearning4j入门——让计算机阅读《天龙八部》"
+                    data-images="http://localhost:4000/img/green.jpg"
+                    data-content="很早在实验室就看见钱宝宝用Google的Word2Vector来跑《天龙八部》，找出与指定词最相关的几个词，最近正好学习新出的深度学习开源项目DeepLe... | Microdust:Azeril's blog"
+                    data-url="http://localhost:4000/2016/07/20/DeepLearning4J%E5%85%A5%E9%97%A8-%E8%AE%A9%E8%AE%A1%E7%AE%97%E6%9C%BA%E9%98%85%E8%AF%BB-%E5%A4%A9%E9%BE%99%E5%85%AB%E9%83%A8/">
+                    <div class="ds-share-inline">
+                      <ul  class="ds-share-icons-16">
+
+                        <li data-toggle="ds-share-icons-more"><a class="ds-more" href="#">分享到：</a></li>
+                        <li><a class="ds-wechat flat" href="javascript:void(0);" data-service="wechat">微信</a></li>
+                        <li><a class="ds-weibo flat" href="javascript:void(0);" data-service="weibo">微博</a></li>
+                        <li><a class="ds-douban flat" href="javascript:void(0);" data-service="douban">豆瓣</a></li>
+                      </ul>
+                      <div class="ds-share-icons-more">
+                      </div>
+                    </div>
+                <hr>
+                </div>
+                <!-- Duoshuo Share end-->
+
+
+                <!-- 多说评论框 start -->
+                <div class="comment">
+                    <div class="ds-thread" data-thread-key="/2016/07/20/DeepLearning4J入门——让计算机阅读《天龙八部》" data-title="Deeplearning4j入门——让计算机阅读《天龙八部》" data-url="http://localhost:4000/2016/07/20/DeepLearning4J%E5%85%A5%E9%97%A8-%E8%AE%A9%E8%AE%A1%E7%AE%97%E6%9C%BA%E9%98%85%E8%AF%BB-%E5%A4%A9%E9%BE%99%E5%85%AB%E9%83%A8/"></div>
+                </div>
+                <!-- 多说评论框 end -->
+            </div>
+        </div>
+    </div>
+</article>
+
+
+
+<!-- 多说公共JS代码 start (一个网页只需插入一次) -->
+<script type="text/javascript">
+var duoshuoQuery = {short_name:"cnfeat"};
+    (function() {
+        var ds = document.createElement('script');
+        ds.type = 'text/javascript';ds.async = true;
+        ds.src = (document.location.protocol == 'https:' ? 'https:' : 'http:') + '//cdnjs.cloudflare.com/ajax/libs/embed-js/4.2.1/embed.min.js';
+        ds.charset = 'UTF-8';
+        (document.getElementsByTagName('head')[0]
+         || document.getElementsByTagName('body')[0]).appendChild(ds);
+    })();
+</script>
+<!-- 多说公共JS代码 end -->
+
+<!-- async load function -->
+<script>
+    function async(u, c) {
+      var d = document, t = 'script',
+          o = d.createElement(t),
+          s = d.getElementsByTagName(t)[0];
+      o.src = u;
+      if (c) { o.addEventListener('load', function (e) { c(null, e); }, false); }
+      s.parentNode.insertBefore(o, s);
+    }
+</script>
+
+<!-- anchor-js, Doc:http://bryanbraun.github.io/anchorjs/ -->
+<script>
+    async("http://cdn.bootcss.com/anchor-js/1.1.1/anchor.min.js",function(){
+        anchors.options = {
+          visible: 'always',
+          placement: 'right',
+          icon: '#'
+        };
+        anchors.add().remove('.intro-header h1').remove('.subheading');
+    })
+</script>
+<style>
+    /* place left on bigger screen */
+    @media all and (min-width: 800px) {
+        .anchorjs-link{
+            position: absolute;
+            left: -0.75em;
+            font-size: 1.1em;
+            margin-top : -0.1em;
+        }
+    }
+</style>
+
+
+    <!-- Footer -->
+<footer>
+    <div class="container">
+        <div class="row">
+            <div class="col-lg-8 col-lg-offset-2 col-md-10 col-md-offset-1">
+                <ul class="list-inline text-center">
+                    <!-- kill the Facebook and Weibo -->
+                    <li>
+                        <a href="/feed.xml">
+                            <span class="fa-stack fa-lg">
+                                <i class="fa fa-circle fa-stack-2x"></i>
+                                <i class="fa fa-rss fa-stack-1x fa-inverse"></i>
+                            </span>
+                        </a>
+                    </li>
+                    
+
+                    
+                    <li>
+                        <a href="https://github.com/LeeKrSe">
+                            <span class="fa-stack fa-lg">
+                                <i class="fa fa-circle fa-stack-2x"></i>
+                                <i class="fa fa-github fa-stack-1x fa-inverse"></i>
+                            </span>
+                        </a>
+                    </li>
+                    
+                    
+                    <!--
+                    
+                    -->
+
+                    <!--
+                    
+                    -->
+
+                    
+                    <li>
+                        <a target="_blank" href="https://www.zhihu.com/people/krselee-37">
+                            <span class="fa-stack fa-lg">
+                                <i class="fa fa-circle fa-stack-2x"></i>
+                                <i class="fa  fa-stack-1x fa-inverse">知</i>
+                            </span>
+                        </a>
+                    </li>
+                    
+                    <!--
+                    
+                    -->
+
+                </ul>
+                <p class="copyright text-muted">
+                &copy; 2017 Krse Lee ❖ Powered by Jekyll.
+                </p>
+            </div>
+        </div>
+    </div>
+</footer>
+
+<!-- jQuery -->
+<script src="/js/jquery.min.js "></script>
+
+<!-- Bootstrap Core JavaScript -->
+<script src="/js/bootstrap.min.js "></script>
+
+<!-- Custom Theme JavaScript -->
+<script src="/js/clean-blog.min.js "></script>
+
+
+
+<!-- Highlight.js -->
+<script>
+    async("http://cdn.bootcss.com/highlight.js/8.6/highlight.min.js",function(){
+        hljs.initHighlightingOnLoad();
+    })
+</script>
+<link href="http://cdn.bootcss.com/highlight.js/8.6/styles/github.min.css" rel="stylesheet">
+
+
+</body>
+
+</html>
