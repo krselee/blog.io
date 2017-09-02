@@ -1,3 +1,8 @@
+---
+title: DL4J学习——word2vector，让计算机阅读《天龙八部》
+tag: tech
+---
+
 很早在实验室就看见钱宝宝用Google的Word2Vector来跑《天龙八部》，找出与指定词最相关的几个词，最近正好学习新出的深度学习开源项目DeepLearning4J，于是就拿这个例子来练手吧。DL4J的详细用法请看 [DL4J快速入门](http://deeplearning4j.org/quickstart.html) 。       
 DeepLearning4J的Example中自带了很多应用实例，Word2Vector也在其中，因此我的工作主要是以下几步：        
 
